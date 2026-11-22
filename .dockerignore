@@ -1,0 +1,9 @@
+**/node_modules
+**/bin
+**/obj
+**/data
+**/wwwroot
+.npm-cache
+.git
+docs/e2e-*
+**/test-results

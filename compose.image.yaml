@@ -1,0 +1,26 @@
+services:
+  personal-hub:
+    image: "${PERSONAL_HUB_IMAGE:?Set PERSONAL_HUB_IMAGE to your published registry image}"
+    restart: unless-stopped
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${HOST_PORT:-8088}:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Default: Data Source=/app/data/dashboard.db;Foreign Keys=True;Default Timeout=5
+      AllowedHosts: "${ALLOWED_HOSTS:-localhost;127.0.0.1;[::1]}"
+      TZ: "${TZ:-Europe/Warsaw}"
+    volumes:
+      - personal_hub_data:/app/data
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, dotnet, PersonalHub.Api.dll, --healthcheck]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+volumes:
+  personal_hub_data:

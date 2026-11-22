@@ -1,0 +1,17 @@
+{
+  "cards": 500,
+  "tasks": 1000,
+  "samplesMs": [
+    21.9785,
+    17.6668,
+    15.6286,
+    15.7889,
+    22.4365,
+    17.388,
+    21.0276
+  ],
+  "medianMs": 17.6668,
+  "budgetMs": 150,
+  "transport": "WebApplicationFactory in-process, warm queries, SQLite temp file",
+  "measuredAt": "2026-11-22T23:14:45.6386211+00:00"
+}

@@ -1,0 +1,11 @@
+**/node_modules/
+**/bin/
+**/obj/
+**/data/
+**/wwwroot/
+**/*.tsbuildinfo
+.npm-cache/
+.env
+docs/e2e-report/
+docs/e2e-results/
+**/test-results/

@@ -1,0 +1,783 @@
+/* Compact dashboard and the task module share a single working surface. */
+:root {
+  --bg: #161617;
+  --surface: #1e1e20;
+  --surface-hover: #2a2a2d;
+  --text: #ededf0;
+  --muted: #b2b2ba;
+  --border: #3a3a40;
+  --accent: #cc0000;
+  --radius: 10px;
+}
+:root[data-theme="light"] {
+  --bg: #f4f4f6;
+  --surface: #fff;
+  --surface-hover: #ededf0;
+  --text: #242429;
+  --muted: #5c5c66;
+  --border: #d1d1d8;
+}
+h1,
+h2,
+h3,
+h4 {
+  text-wrap: balance;
+}
+p {
+  text-wrap: pretty;
+}
+.app-header {
+  padding: 14px 24px;
+  gap: 24px;
+}
+.brand {
+  font-size: 1rem;
+  gap: 8px;
+}
+.brand-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+}
+.search-trigger {
+  max-width: 380px;
+  min-width: 210px;
+  flex: 1;
+  min-height: 32px;
+  padding: 5px 10px;
+  font-size: 0.8rem;
+}
+.clock {
+  min-width: 115px;
+}
+.clock time {
+  font-size: 1.2rem;
+}
+.clock span {
+  font-size: 0.7rem;
+}
+.app-header .save-status {
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+.settings-link {
+  text-decoration: none;
+  color: var(--muted);
+}
+.app-toolbar {
+  padding: 10px 24px;
+  background: var(--surface);
+}
+main {
+  padding: 18px 24px 40px;
+}
+button,
+.button {
+  min-height: 32px;
+  padding: 5px 10px;
+}
+input,
+select,
+textarea {
+  min-height: 34px;
+  padding: 6px 9px;
+}
+input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  min-height: 16px;
+}
+.icon-button,
+.more-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 4px;
+  border: 0;
+  border-radius: 5px;
+  color: var(--muted);
+  background: transparent;
+}
+.icon-button:hover,
+.more-button:hover,
+.drag-handle:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+.quiet-button {
+  border: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+.quiet-button:hover {
+  color: var(--text);
+}
+.dashboard-navigation {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+  min-width: 0;
+}
+.dashboard-navigation-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding-bottom: 7px;
+}
+.tabs {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  margin: 0;
+  border: 0;
+  padding: 0 0 7px;
+  scrollbar-width: thin;
+}
+.tabs > .tab-entry {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+  gap: 0;
+  border-radius: 6px;
+}
+.tab-label {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 7px 9px !important;
+  font-size: 0.85rem;
+  min-height: 34px;
+}
+.tab-tools {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+.tab-tools .more-button,
+.tab-tools .drag-handle {
+  width: 24px;
+  min-width: 24px;
+  padding: 3px;
+  opacity: 0.35;
+}
+.tabs > .tab-entry:hover .tab-tools button,
+.tabs > .tab-entry:focus-within .tab-tools button {
+  opacity: 1;
+}
+.tab-entry.is-active {
+  background: var(--surface-hover);
+  box-shadow: inset 0 -2px 0 var(--tab-accent, var(--accent));
+}
+.tab-entry.is-active .tab-label {
+  color: var(--text);
+  font-weight: 600;
+}
+.tabs .add-tab {
+  margin-left: 4px;
+}
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+  margin-bottom: 0;
+}
+.dashboard-section {
+  grid-column: span var(--section-span, 12);
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  min-width: 0;
+}
+.dashboard-section > .section-heading {
+  min-height: 28px;
+  margin-bottom: 6px;
+  gap: 8px;
+}
+.dashboard-section > .section-heading h2 {
+  font-size: 0.88rem;
+  font-weight: 650;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.dashboard-section > .section-heading > .icon {
+  color: var(--entity-accent, var(--muted));
+  width: 16px;
+  height: 16px;
+}
+.section-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.section-width {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 3px;
+  color: var(--muted);
+  margin: 0 3px 0 0;
+}
+.section-width select {
+  font-size: 0.72rem;
+  min-height: 26px;
+  width: 61px;
+  padding: 3px 1px 3px 3px;
+  border-color: transparent;
+  background: transparent;
+  cursor: pointer;
+}
+.section-width select:hover,
+.section-width select:focus-visible {
+  border-color: var(--border);
+}
+.section-tools > .drag-handle {
+  opacity: 0.35;
+}
+.dashboard-section:hover .section-tools > .drag-handle,
+.dashboard-section:focus-within .section-tools > .drag-handle {
+  opacity: 1;
+}
+.section-description {
+  font-size: 0.76rem;
+  line-height: 1.45;
+  margin: 0 0 8px;
+  color: var(--muted);
+}
+.section-items {
+  gap: 3px;
+  border-radius: 5px;
+  overflow: visible;
+  background: transparent;
+}
+.section-items.section-list {
+  grid-template-columns: 1fr !important;
+}
+.dashboard-item {
+  position: relative;
+  border-radius: 5px;
+  min-width: 0;
+}
+.item-main {
+  min-height: 38px;
+  gap: 9px;
+  padding: 8px 66px 8px 8px;
+  border-radius: 5px;
+}
+.item-main .icon {
+  color: var(--entity-accent, var(--accent-ink));
+  width: 20px;
+  height: 20px;
+}
+.item-copy strong {
+  font-size: 0.84rem;
+  font-weight: 550;
+  line-height: 1.4;
+}
+.item-copy span {
+  font-size: 0.74rem;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-top: 2px;
+}
+.item-controls {
+  position: absolute;
+  right: 3px;
+  top: 5px;
+  display: flex;
+  gap: 0;
+  align-items: center;
+  opacity: 0;
+}
+.dashboard-item:hover .item-controls,
+.dashboard-item:focus-within .item-controls {
+  opacity: 1;
+}
+.item-controls .more-button,
+.item-controls .drag-handle {
+  width: 26px;
+  height: 26px;
+  min-height: 26px;
+}
+.drag-handle {
+  min-height: 26px;
+  min-width: 22px;
+  padding: 3px;
+}
+.service-card .item-main {
+  min-height: 65px;
+  padding: 10px 66px 10px 8px;
+  align-items: center;
+}
+.note {
+  padding: 0;
+}
+.note-content {
+  padding: 9px 66px 9px 9px;
+}
+.note-content h3 {
+  font-size: 0.85rem;
+  margin-bottom: 5px;
+}
+.note-content .markdown {
+  font-size: 0.8rem;
+}
+.spacer {
+  height: 20px;
+}
+.quick-access {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 16px;
+  min-width: 0;
+}
+.quick-access h2 {
+  font-size: 0.72rem;
+  white-space: nowrap;
+  margin: 0;
+  font-weight: 500;
+}
+.quick-access > div {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.quick-access .dashboard-item {
+  background: transparent;
+  max-width: 320px;
+}
+.quick-access .item-main {
+  padding: 5px 35px 5px 7px;
+  min-height: 32px;
+}
+.quick-access .item-copy span {
+  display: none;
+}
+.quick-access .icon {
+  width: 16px;
+  height: 16px;
+}
+.quick-access .item-controls {
+  top: 3px;
+}
+.dashboard-empty {
+  padding: 24px 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.empty-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 34px;
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.77rem;
+  justify-content: flex-start;
+  padding: 7px 9px;
+}
+.empty-add:hover {
+  color: var(--text);
+}
+.action-menu {
+  z-index: 40;
+  min-width: 205px;
+  max-width: min(300px, calc(100vw - 16px));
+  max-height: min(
+    75dvh,
+    var(--radix-context-menu-content-available-height, 75dvh)
+  );
+  overflow-y: auto;
+  background: var(--surface);
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 30px #0004;
+}
+.menu-label {
+  font-size: 0.72rem;
+  padding: 6px 8px 8px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 6px 9px;
+  border-radius: 4px;
+  font-size: 0.83rem;
+  cursor: default;
+  outline: none;
+  user-select: none;
+}
+.menu-item[data-highlighted] {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.menu-item[data-disabled] {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.menu-separator {
+  height: 1px;
+  background: var(--border);
+  margin: 4px;
+}
+.task-module {
+  margin-top: 24px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+  scroll-margin-top: 16px;
+}
+.task-module-heading {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.task-module-heading > h2 {
+  font-size: 0.97rem;
+  font-weight: 650;
+  margin: 0;
+}
+.task-module-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+.quick-task-input {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1;
+  max-width: 460px;
+  min-width: 250px;
+}
+.quick-task-input label {
+  margin: 0;
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+.quick-task-input input:not([type="checkbox"]) {
+  min-height: 31px;
+  font-size: 0.8rem;
+  padding: 5px 8px;
+}
+.quick-task-input .check {
+  gap: 5px;
+}
+.task-navigation {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.view-tabs {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 3px;
+  margin-bottom: 4px;
+  scrollbar-width: thin;
+}
+.view-tabs button {
+  padding: 5px 9px;
+  min-height: 30px;
+  font-size: 0.76rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+  gap: 7px;
+}
+.view-tabs .count {
+  font-size: 0.7rem;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--surface);
+  font-variant-numeric: tabular-nums;
+}
+.task-filters {
+  margin: 0 0 10px;
+}
+.task-filters > summary {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  min-height: 27px;
+  list-style: none;
+  font-size: 0.74rem;
+  margin: 0;
+}
+.task-filters > summary::-webkit-details-marker {
+  display: none;
+}
+.task-filters .filters {
+  padding: 9px 0 3px;
+  margin: 0;
+  align-items: end;
+  gap: 9px;
+}
+.task-filters .filters input,
+.task-filters .filters select {
+  font-size: 0.76rem;
+  min-height: 31px;
+}
+.filter-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent-ink);
+}
+.kanban {
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 10px;
+}
+.kanban-column {
+  background: transparent;
+  padding: 9px;
+  border-radius: 8px;
+  min-width: 0;
+}
+.kanban-column > .section-heading {
+  gap: 6px;
+  margin: 0 0 7px;
+}
+.kanban-column h3 {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.kanban-column h3::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 2px;
+  margin-right: 6px;
+  vertical-align: middle;
+  background: var(--column-accent, var(--accent));
+}
+.kanban-column h3 .count {
+  margin-left: 3px;
+  font-size: 0.7rem;
+}
+.column-tools {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+.column-tools > .drag-handle {
+  opacity: 0.4;
+}
+.kanban-column:hover .column-tools > .drag-handle,
+.kanban-column:focus-within .column-tools > .drag-handle {
+  opacity: 1;
+}
+.column-tools .more-button,
+.column-tools .icon-button {
+  width: 23px;
+  min-height: 25px;
+}
+.kanban-column .task-card {
+  border: 0;
+}
+.task-card {
+  background: var(--surface);
+  border-radius: 5px;
+  padding: 8px;
+  margin-bottom: 5px;
+  min-width: 0;
+}
+.task-heading {
+  gap: 7px;
+  align-items: center;
+}
+.task-title {
+  font-size: 0.8rem;
+  line-height: 1.45;
+  min-height: 24px;
+}
+.task-heading > input {
+  margin: 0;
+  width: 14px;
+  height: 14px;
+  min-height: 14px;
+}
+.task-card-tools {
+  display: flex;
+  gap: 0;
+  align-items: center;
+  opacity: 0;
+  flex-shrink: 0;
+}
+.task-card-tools .drag-handle,
+.task-card-tools .more-button {
+  width: 22px;
+  min-width: 22px;
+  height: 24px;
+  min-height: 24px;
+  padding: 2px;
+}
+.task-card:hover .task-card-tools,
+.task-card:focus-within .task-card-tools {
+  opacity: 1;
+}
+.task-meta {
+  margin: 3px 0 0 21px;
+  font-size: 0.68rem;
+  gap: 3px 8px;
+}
+.task-meta:empty {
+  display: none;
+}
+.task-list {
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+  gap: 6px;
+}
+.task-list > .task-card {
+  margin: 0;
+}
+.task-card.is-completed .task-title {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.task-module .empty {
+  font-size: 0.78rem;
+  padding: 15px 8px;
+  margin: 0;
+}
+.wip-warning {
+  font-size: 0.72rem;
+  margin-bottom: 8px;
+}
+@media (max-width: 1000px) {
+  .dashboard-section {
+    grid-column: span var(--section-tablet-span, 12);
+  }
+  .quick-task-input {
+    max-width: none;
+  }
+}
+@media (max-width: 700px) {
+  .app-header {
+    padding: 12px 14px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .app-header .clock {
+    margin-left: auto;
+    min-width: 90px;
+  }
+  .app-header .save-status {
+    display: none;
+  }
+  .search-trigger {
+    order: 4;
+    min-width: 100%;
+    width: 100%;
+    max-width: none;
+    min-height: 32px;
+  }
+  .settings-link {
+    margin-left: 0;
+  }
+  main {
+    padding: 12px 12px 32px;
+  }
+  .dashboard-navigation {
+    gap: 5px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .dashboard-navigation .tabs {
+    flex-basis: 100%;
+  }
+  .dashboard-navigation-actions {
+    padding: 0 0 7px;
+    margin-left: auto;
+  }
+  .dashboard-grid {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .dashboard-section {
+    grid-column: span 12;
+    padding: 9px;
+  }
+  .quick-access {
+    align-items: flex-start;
+    gap: 6px;
+    flex-direction: column;
+    margin-bottom: 12px;
+  }
+  .item-controls,
+  .task-card-tools {
+    opacity: 1;
+  }
+  .section-tools > .drag-handle,
+  .tab-tools > .drag-handle {
+    display: none;
+  }
+  .section-tools .more-button,
+  .tab-tools .more-button {
+    opacity: 1;
+  }
+  .task-module {
+    margin-top: 18px;
+    padding-top: 12px;
+  }
+  .task-module-heading {
+    gap: 9px;
+    margin-bottom: 9px;
+  }
+  .quick-task-input {
+    order: 3;
+    flex-basis: 100%;
+    min-width: 0;
+  }
+  .task-module-actions {
+    margin-left: auto;
+  }
+  .task-filters .filters {
+    align-items: end;
+  }
+  .view-tabs button {
+    font-size: 0.73rem;
+  }
+  .kanban {
+    grid-template-columns: 1fr;
+  }
+  .task-filters .filters > label {
+    min-width: 125px;
+  }
+}
