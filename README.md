@@ -10,10 +10,13 @@ Aktualizacja interfejsu 2026-11-23: kompaktowy dashboard, menu kontekstowe zamia
 
 Wymagania: .NET SDK 10 i Node 24 LTS. Node jest potrzebny tylko do budowy lub developmentu.
 
-```powershell
-npm ci --prefix src/personal-hub-web
-npm run build --prefix src/personal-hub-web
-dotnet run --project src/PersonalHub.Api --no-launch-profile --urls http://127.0.0.1:8080
+```bash
+# W folderze z frontend
+npm ci
+npm run dev
+
+# w folderze backend
+dotnet run
 ```
 
 Otwórz http://127.0.0.1:8080. Baza domyślnie: `src/PersonalHub.Api/data/dashboard.db`. Migracje i przykłady powstają przy pierwszym starcie. Usunięcie danych nie powoduje ponownego seedowania.
@@ -22,10 +25,13 @@ Podczas developmentu uruchom API jak wyżej oraz `npm run dev --prefix src/perso
 
 ## Docker / Portainer
 
-```powershell
-Copy-Item .env.example .env
+```bash
+# docker compose uzywajac lokalnego obrazu
 docker compose -f compose.build.yaml up --build -d
-docker compose -f compose.build.yaml ps
+
+# docker compose uzywajac produkcyjnego gotowego kodu
+# skopiuj zawartosc compose.production.yaml i uruchom w portainer lub uruchom plik lokalnie
+docker compose -f compose.production.yaml up -d
 ```
 
 Otwórz http://127.0.0.1:8088. `HOST_PORT` zmienia port. `BIND_ADDRESS` domyślnie wynosi `127.0.0.1`. Dla LAN ustaw konkretny adres interfejsu oraz jawny `ALLOWED_HOSTS` (nazwy/IP oddzielone średnikiem, bez portów). Samo zmienienie portu nie zabezpiecza aplikacji.
