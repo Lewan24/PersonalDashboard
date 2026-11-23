@@ -4,7 +4,7 @@ import { useHub } from "../../HubContext";
 import type { Section } from "../../types";
 import type { DashboardActions } from "./useDashboardActions";
 import { ActionMenu, MenuButton } from "../../components/ActionMenu";
-import { DragHandle, readDrag } from "../../components/DragHandle";
+import { dragSource, dropTarget, insertionIndex } from "../../components/drag";
 import { Icon } from "../../components/Icon";
 import { DashboardItemCard } from "./DashboardItemCard";
 import { t } from "../../i18n";
@@ -20,14 +20,23 @@ export function DashboardSectionCard({
   section,
   index,
   actions,
+  searchMatch,
+  matchingItems,
+  revealItems,
 }: {
   section: Section;
   index: number;
   actions: DashboardActions;
+  searchMatch?: boolean;
+  matchingItems?: Set<string>;
+  revealItems: boolean;
 }) {
   const { data, mutate } = useHub();
   const menu = actions.sectionActions(section);
+  const openEditor = () =>
+    actions.setEditor({ kind: "sections", value: { ...section } });
   const items = data.items.filter((x) => x.sectionId === section.id);
+  const collapsed = section.isCollapsed && !revealItems;
   const width = section.widthPercent ?? 100;
   return (
     <ActionMenu label={section.name} actions={menu}>
@@ -39,36 +48,68 @@ export function DashboardSectionCard({
             "--entity-accent": section.accentColor,
             "--section-tablet-span": width <= 50 ? 6 : 12,
             "--section-desktop": Math.min(
-              section.desktopColumns,
+              section.desktopColumns ?? 4,
               width <= 33 ? 1 : width <= 50 ? 2 : 6,
             ),
-            "--section-tablet": section.tabletColumns,
-            "--section-mobile": section.mobileColumns,
+            "--section-tablet": section.tabletColumns ?? 2,
+            "--section-mobile": section.mobileColumns ?? 1,
           } as CSSProperties
         }
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          const drag = readDrag(e);
-          if (drag?.kind === "item") {
-            const item = data.items.find((x) => x.id === drag.id);
-            if (item)
-              void actions
-                .itemMove(item, section.id, items.length)
-                .catch(() => {});
-          } else if (drag?.kind === "section") {
-            const source = data.sections.find((x) => x.id === drag.id);
-            if (source)
-              void actions
-                .sectionMove(source, section.tabId, index)
-                .catch(() => {});
-          }
-        }}
+        data-search-match={searchMatch}
+        {...dragSource(
+          {
+            kind: "section",
+            id: section.id,
+            container: section.tabId,
+            version: section.version,
+          },
+          openEditor,
+        )}
+        data-drag-card={"section:" + section.id}
+        {...dropTarget(
+          (drag) =>
+            drag.kind === "item"
+              ? "inside"
+              : drag.kind === "section" && drag.id !== section.id
+                ? "grid"
+                : undefined,
+          (drag, position) => {
+            if (drag.kind === "item") {
+              const item = data.items.find((x) => x.id === drag.id);
+              if (item)
+                void actions
+                  .itemMove(item, section.id, items.length)
+                  .catch(() => {});
+            } else {
+              const source = data.sections.find((x) => x.id === drag.id);
+              if (source) {
+                const sourceIndex = data.sections
+                  .filter((x) => x.tabId === section.tabId)
+                  .findIndex((x) => x.id === source.id);
+                void actions
+                  .sectionMove(
+                    source,
+                    section.tabId,
+                    insertionIndex(index, sourceIndex, position === "after"),
+                  )
+                  .catch(() => {});
+              }
+            }
+          },
+        )}
       >
         <div className="section-heading">
           <Icon name={section.iconKey} />
-          <h2>{section.name}</h2>
+          <h2>
+            <button
+              type="button"
+              className="text-button entity-heading-button"
+              data-drag-trigger
+              onClick={openEditor}
+            >
+              {section.name}
+            </button>
+          </h2>
           <div className="section-tools">
             <label className="section-width">
               <span className="sr-only">
@@ -95,22 +136,14 @@ export function DashboardSectionCard({
                 ))}
               </select>
             </label>
-            <DragHandle
-              data={{
-                kind: "section",
-                id: section.id,
-                container: section.tabId,
-                version: section.version,
-              }}
-            />
+
             <button
               className="icon-button"
               aria-label={
-                t(section.isCollapsed ? "expand" : "collapse") +
-                " " +
-                section.name
+                t(collapsed ? "expand" : "collapse") + " " + section.name
               }
-              aria-expanded={!section.isCollapsed}
+              aria-expanded={!collapsed}
+              disabled={revealItems}
               aria-controls={"section-" + section.id}
               onClick={() =>
                 void mutate({
@@ -123,7 +156,7 @@ export function DashboardSectionCard({
                 }).catch(() => {})
               }
             >
-              {section.isCollapsed ? (
+              {collapsed ? (
                 <ChevronRight size={16} />
               ) : (
                 <ChevronDown size={16} />
@@ -132,7 +165,7 @@ export function DashboardSectionCard({
             <MenuButton label={section.name} actions={menu} />
           </div>
         </div>
-        {!section.isCollapsed && (
+        {!collapsed && (
           <div id={"section-" + section.id}>
             {section.description && (
               <p className="section-description">{section.description}</p>
@@ -149,6 +182,7 @@ export function DashboardSectionCard({
                   item={item}
                   index={i}
                   actions={actions}
+                  searchMatch={matchingItems?.has(item.id)}
                 />
               ))}
             </div>

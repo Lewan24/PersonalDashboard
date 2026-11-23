@@ -66,6 +66,9 @@ namespace PersonalHub.Api.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("SectionId")
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("ShowUrl")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("SortOrder")
                         .HasColumnType("INTEGER");
 

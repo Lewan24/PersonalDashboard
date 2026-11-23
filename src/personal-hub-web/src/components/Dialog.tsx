@@ -6,8 +6,10 @@ export function Dialog({
   onClose,
   children,
   role = "dialog",
+  className = "",
 }: {
   title: string;
+  className?: string;
   onClose: () => void;
   children: ReactNode;
   role?: "dialog" | "alertdialog";
@@ -23,7 +25,7 @@ export function Dialog({
         <Radix.Overlay className="dialog-overlay" />
         <Radix.Content
           role={role}
-          className="dialog"
+          className={("dialog " + className).trim()}
           onOpenAutoFocus={(e) => {
             e.preventDefault();
             requestAnimationFrame(() => {

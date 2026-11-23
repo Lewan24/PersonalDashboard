@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useHub } from "../HubContext";
 import type { HubTask } from "../types";
 import { t } from "../i18n";
-import { DragHandle } from "./DragHandle";
+import { TagBadge } from "./Tags";
+import { dragSource } from "./drag";
 import { ActionMenu, MenuButton } from "./ActionMenu";
 import type { MenuAction } from "./ActionMenu";
 import { MoveDialog } from "./MoveDialog";
@@ -13,11 +14,13 @@ export function TaskCard({
   index = 0,
   showStatus = true,
   projection = false,
+  searchMatch,
 }: {
   task: HubTask;
   index?: number;
   showStatus?: boolean;
   projection?: boolean;
+  searchMatch?: boolean;
 }) {
   const { data, setTask, mutate } = useHub();
   const [moving, setMoving] = useState(false);
@@ -110,6 +113,19 @@ export function TaskCard({
     <>
       <ActionMenu label={task.title} actions={menu}>
         <article
+          data-search-match={searchMatch}
+          {...dragSource(
+            {
+              kind: "task",
+              canSchedule:
+                !task.completedAt && !task.isArchived && !column?.isArchived,
+              id: task.id,
+              container: task.columnId,
+              version: task.version,
+            },
+            () => setTask(task),
+          )}
+          data-drag-card={"task:" + task.id}
           className={"task-card" + (task.completedAt ? " is-completed" : "")}
         >
           <div className="task-heading">
@@ -126,20 +142,13 @@ export function TaskCard({
               }
             />
             <button
+              data-drag-trigger
               className="text-button task-title"
               onClick={() => setTask(task)}
             >
               {task.title}
             </button>
             <div className="task-card-tools">
-              <DragHandle
-                data={{
-                  kind: "task",
-                  id: task.id,
-                  container: task.columnId,
-                  version: task.version,
-                }}
-              />
               <MenuButton label={task.title} actions={menu} />
             </div>
           </div>
@@ -164,9 +173,7 @@ export function TaskCard({
               </span>
             )}
             {task.tags.map((tag) => (
-              <span key={tag.id} className="tag">
-                {tag.name}
-              </span>
+              <TagBadge key={tag.id} tag={tag} />
             ))}
             {related && safeUrl(related.url) && (
               <a href={related.url!} target="_blank" rel="noopener noreferrer">

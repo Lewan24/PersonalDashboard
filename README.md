@@ -4,7 +4,7 @@ Self-hosted dashboard linków i Kanban z zapisem w SQLite. React + TypeScript, A
 
 Aktualizacja interfejsu 2026-11-23: kompaktowy dashboard, menu kontekstowe zamiast trybu edycji, trwała szerokość sekcji i pełny moduł zadań pod linkami. Raport zmian i aktualne testy: [UI_UPDATE.md](docs/UI_UPDATE.md).
 
-**Stan: działający wycinek produktu, odbiór MVP nie jest zakończony.** API i frontend budują się; testy jednostkowe i integracyjne uruchomiono. Docker runtime i przeglądarkowe E2E nie zostały zweryfikowane w tym środowisku. Pełne wyniki i wszystkie 27 scenariuszy: [docs/PROGRESS.md](docs/PROGRESS.md). Oryginalna specyfikacja: [docs/SPEC.md](docs/SPEC.md).
+**Stan: działający wycinek produktu, odbiór MVP nie jest zakończony.** API i frontend budują się; testy jednostkowe i integracyjne uruchomiono. Projekt obejmuje testy przeglądarkowe E2E. Obraz Docker i plik produkcyjny sprawdzono na lokalnym stacku. Pełne wyniki i wszystkie 27 scenariuszy: [docs/PROGRESS.md](docs/PROGRESS.md). Oryginalna specyfikacja: [docs/SPEC.md](docs/SPEC.md).
 
 ## Uruchomienie lokalne
 
@@ -24,13 +24,13 @@ Podczas developmentu uruchom API jak wyżej oraz `npm run dev --prefix src/perso
 
 ```powershell
 Copy-Item .env.example .env
-docker compose up --build -d
-docker compose ps
+docker compose -f compose.build.yaml up --build -d
+docker compose -f compose.build.yaml ps
 ```
 
 Otwórz http://127.0.0.1:8088. `HOST_PORT` zmienia port. `BIND_ADDRESS` domyślnie wynosi `127.0.0.1`. Dla LAN ustaw konkretny adres interfejsu oraz jawny `ALLOWED_HOSTS` (nazwy/IP oddzielone średnikiem, bez portów). Samo zmienienie portu nie zabezpiecza aplikacji.
 
-**Brak logowania:** każda osoba mająca dostęp sieciowy ma pełny dostęp do danych, edycji i backupów. Nie publikuj aplikacji bez dodatkowego uwierzytelniania. Instrukcje LAN/VPN/proxy i Portainera: [DEPLOYMENT](docs/DEPLOYMENT.md), [SECURITY](docs/SECURITY.md). Obraz z registry publikujesz samodzielnie; wariant Portainera bez kontekstu builda to `compose.image.yaml`.
+**Brak logowania:** każda osoba mająca dostęp sieciowy ma pełny dostęp do danych, edycji i backupów. Nie publikuj aplikacji bez dodatkowego uwierzytelniania. Instrukcje LAN/VPN/proxy i Portainera: [DEPLOYMENT](docs/DEPLOYMENT.md), [SECURITY](docs/SECURITY.md). Obraz z registry publikujesz samodzielnie; wariant Portainera bez kontekstu builda to `compose.production.yaml`.
 
 ## Codzienna praca
 
@@ -43,13 +43,21 @@ Otwórz http://127.0.0.1:8088. `HOST_PORT` zmienia port. `BIND_ADDRESS` domyśln
 
 Formularze zapisują po przycisku **Zapisz**. Ruchy i szybkie akcje zapisują od razu. Wskaźnik zapisu i błędy są w pasku aplikacji. Po konflikcie zamknij formularz i ponownie otwórz aktualny rekord.
 
+## Import z Homepage
+
+W **Ustawieniach**, w sekcji **Import z Homepage**, wybierz `bookmarks.yaml`, `services.yaml` lub oba pliki. Dołącz `settings.yaml`, aby odtworzyć kolejność, układ i przypisanie grup do zakładek. Podgląd pokazuje liczbę kart przed zapisem. Import dopisuje linki do odpowiednich sekcji i pomija powtórki o tym samym tytule i adresie w tej samej sekcji. Wpisy z grupy szybkiego dostępu stają się ulubionymi.
+
+API przechowuje odpowiedzi dashboardu i list zadań w pamięci przez maksymalnie 30 sekund. Po udanym zapisie kolejne odczyty korzystają z aktualnych danych.
+
+Linki mogą używać automatycznej ikony z `/favicon.ico` na swojej domenie. Kartę można też ustawić na ikonę wbudowaną lub przesłaną w aplikacji. Jeśli witryna nie udostępnia ikony pod tym adresem, karta pokaże ikonę linku.
+
 ## Backup, restore i aktualizacja
 
-W ustawieniach pobierz JSON z ikonami albo świeżą kopię SQLite. Kopia SQLite powstaje przez SQLite Backup API, obejmuje zatwierdzone dane z WAL. Nie kopiuj samego żywego `.db`.
+Aby przenieść dashboard między instancjami, na źródłowej wybierz **Ustawienia → Dane i kopie zapasowe → Eksportuj bazę SQLite**. Na docelowej wybierz **Importuj bazę SQLite**, wskaż pobrany plik i potwierdź zastąpienie danych. Kopia poprzedniej bazy docelowej będzie dostępna do pobrania.
 
-Import JSON: plik → zweryfikowany podgląd → potwierdzenie zastąpienia danych. Przed commitem powstaje kopia. Przywracanie SQLite wymaga zatrzymania kontenera, podmiany pliku i usunięcia starych `-wal`/`-shm`. Dokładna procedura: [BACKUP_RESTORE](docs/BACKUP_RESTORE.md).
+**Wyczyść bazę** tworzy kopię i usuwa dane oraz własne ustawienia. Tablica otrzymuje puste, domyślne kolumny. Kopie są dostępne w sekcji **Kopie na serwerze**. Eksport i import JSON pozostają dostępne. Więcej informacji zawiera [procedura kopii i odtwarzania](docs/BACKUP_RESTORE.md).
 
-Aktualizacja lokalnego obrazu: `docker compose up --build -d` na tym samym wolumenie. Dla registry: `docker compose -f compose.image.yaml pull`, następnie `up -d` z tym samym plikiem. Migracje mają automatyczne snapshoty. Nie używaj `down -v`, jeśli chcesz zachować dane.
+Aktualizacja lokalnego obrazu: `docker compose -f compose.build.yaml up --build -d` na tym samym wolumenie. Dla registry: `docker compose -f compose.production.yaml pull`, następnie `up -d` z tym samym plikiem. Migracje mają automatyczne snapshoty. Nie używaj `down -v`, jeśli chcesz zachować dane.
 
 ## Testy
 
@@ -68,4 +76,4 @@ E2E wymaga uruchomionej aplikacji na porcie 8080 i przeglądarki Playwright. Szc
 
 Natywne DnD zamiast wymaganego `@dnd-kit/react`; dotyk korzysta z menu przenoszenia. Markdown obsługuje ograniczony podzbiór (nagłówki, akapity, pogrubienia, kod inline, bezpieczne linki). Brak pełnego selektora Lucide/Simple Icons i pełnej generacji DTO przez `openapi-typescript`. Dostępne są wybrane ikony Lucide oraz upload własnych. Nie wszystkie mutacje mają optimistic update; reszta pokazuje zapis i odświeża stan po sukcesie. Nie zmierzono Lighthouse ani axe. Nie potwierdzono odbioru kontenera non-root na świeżym wolumenie.
 
-Etap 2 ze specyfikacji pozostaje odłożony: cykliczność, import merge, restore SQLite z UI, auth/PIN, historia, dodatkowe schematy URL, favicony i szablony sekcji. Etap 3: monitoring, integracje, PWA i kalendarz.
+Etap 2 ze specyfikacji pozostaje odłożony: cykliczność, scalanie kopii zapasowych, auth/PIN, historia, dodatkowe schematy URL i szablony sekcji. Etap 3: monitoring, integracje, PWA i kalendarz.

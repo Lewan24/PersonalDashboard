@@ -1,12 +1,15 @@
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useFieldArray, useForm } from "react-hook-form";
+import { Plus, X } from "lucide-react";
 import { useHub } from "../HubContext";
 import type { HubTask, Checklist, TaskLink } from "../types";
 import { t } from "../i18n";
 import { safeUrl } from "../api";
 import { taskInputSchema } from "../validation";
 import { Dialog } from "./Dialog";
+import { TagOptions } from "./Tags";
 import { Markdown } from "./Markdown";
+import { MenuButton } from "./ActionMenu";
 interface TaskForm {
   title: string;
   descriptionMarkdown: string;
@@ -17,6 +20,8 @@ interface TaskForm {
   startDate: string;
   relatedDashboardItemId: string;
   tagIds: string[];
+  checklist: Checklist[];
+  links: TaskLink[];
 }
 export function TaskEditor({
   task,
@@ -27,9 +32,8 @@ export function TaskEditor({
 }) {
   const { data, mutate } = useHub();
   const [error, setError] = useState("");
-  const [checklist, setChecklist] = useState<Checklist[]>(task.checklist ?? []);
-  const [links, setLinks] = useState<TaskLink[]>(task.links ?? []);
   const {
+    control,
     register,
     handleSubmit,
     watch,
@@ -47,8 +51,17 @@ export function TaskEditor({
       startDate: task.startDate ?? "",
       relatedDashboardItemId: task.relatedDashboardItemId ?? "",
       tagIds: task.tags?.map((x) => x.id) ?? [],
+      checklist: task.checklist ?? [],
+      links: task.links ?? [],
     },
   });
+  const checklist = useFieldArray({
+    control,
+    name: "checklist",
+    keyName: "rowKey",
+  });
+  const links = useFieldArray({ control, name: "links", keyName: "rowKey" });
+
   async function action(action: string) {
     try {
       await mutate({
@@ -62,7 +75,7 @@ export function TaskEditor({
   }
   const submit = handleSubmit(async (values) => {
     setError("");
-    if (links.some((x) => !safeUrl(x.url))) {
+    if (values.links.some((link) => !safeUrl(link.url.trim()))) {
       setError(t("invalidUrl"));
       return;
     }
@@ -72,8 +85,7 @@ export function TaskEditor({
       dueTime: values.dueTime || null,
       startDate: values.startDate || null,
       relatedDashboardItemId: values.relatedDashboardItemId || null,
-      checklist,
-      links,
+      links: values.links.map((link) => ({ ...link, url: link.url.trim() })),
       ...(task.id ? { expectedVersion: task.version } : {}),
     };
     const validated = taskInputSchema.safeParse(body);
@@ -105,221 +117,217 @@ export function TaskEditor({
     }
   }
   return (
-    <Dialog title={task.id ? t("taskDetails") : t("addTask")} onClose={onClose}>
+    <Dialog
+      title={task.id ? t("editTask") : t("addTask")}
+      onClose={onClose}
+      className="task-editor"
+    >
       <form onSubmit={submit}>
-        <label>
-          {t("title")}
-          <input
-            data-dialog-input
-            required
-            maxLength={200}
-            {...register("title")}
-          />
-        </label>
-        <div className="form-row">
-          <label>
-            {t("column")}
-            <select {...register("columnId")}>
-              {data.columns
-                .filter((x) => !x.isArchived)
-                .map((x) => (
-                  <option key={x.id} value={x.id}>
-                    {x.name}
+        <div className="task-editor-body">
+          <label className="task-editor-title">
+            {t("title")}
+            <input
+              data-dialog-input
+              required
+              maxLength={200}
+              {...register("title")}
+            />
+          </label>
+          <div className="form-row">
+            <label>
+              {t("column")}
+              <select {...register("columnId")}>
+                {data.columns
+                  .filter((x) => !x.isArchived || x.id === task.columnId)
+                  .map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label>
+              {t("priority")}
+              <select {...register("priority")}>
+                {["none", "low", "medium", "high", "urgent"].map((x) => (
+                  <option key={x} value={x}>
+                    {t(x)}
                   </option>
                 ))}
-            </select>
-          </label>
+              </select>
+            </label>
+          </div>
+          <div className="form-row">
+            <label>
+              {t("dueDate")}
+              <input type="date" {...register("dueDate")} />
+            </label>
+            <label>
+              {t("dueTime")}
+              <input type="time" {...register("dueTime")} />
+            </label>
+            <label>
+              {t("startDate")}
+              <input type="date" {...register("startDate")} />
+            </label>
+          </div>
           <label>
-            {t("priority")}
-            <select {...register("priority")}>
-              {["none", "low", "medium", "high", "urgent"].map((x) => (
-                <option key={x} value={x}>
-                  {t(x)}
+            {t("description")}
+            <textarea
+              rows={5}
+              maxLength={20000}
+              {...register("descriptionMarkdown")}
+            />
+          </label>
+          {watch("descriptionMarkdown").trim() && (
+            <details className="task-description-preview">
+              <summary>{t("preview")}</summary>
+              <Markdown text={watch("descriptionMarkdown")} />
+            </details>
+          )}
+          <fieldset className="task-editor-group">
+            <legend>{t("checklist")}</legend>
+            <small>{t("checklistHelp")}</small>
+            {checklist.fields.map((item, index) => (
+              <div className="task-checklist-row" key={item.rowKey}>
+                <input
+                  aria-label={t("checklistDone", { count: index + 1 })}
+                  type="checkbox"
+                  {...register(`checklist.${index}.isChecked`)}
+                />
+                <input
+                  type="text"
+                  required
+                  aria-label={t("checklistEntry", { count: index + 1 })}
+                  placeholder={t("checklistPlaceholder")}
+                  maxLength={200}
+                  {...register(`checklist.${index}.title`)}
+                />
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label={t("removeChecklistEntry", { count: index + 1 })}
+                  onClick={() => checklist.remove(index)}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              className="quiet-button"
+              disabled={checklist.fields.length >= 100}
+              onClick={() =>
+                checklist.append(
+                  { title: "", isChecked: false },
+                  {
+                    focusName: `checklist.${checklist.fields.length}.title`,
+                  },
+                )
+              }
+            >
+              <Plus size={16} />
+              {t("addChecklistEntry")}
+            </button>
+          </fieldset>
+          <fieldset className="task-editor-group">
+            <legend>{t("tags")}</legend>
+            <TagOptions tags={data.tags} input={register("tagIds")} />
+          </fieldset>
+          <fieldset className="task-editor-group">
+            <legend>{t("links")}</legend>
+            <small>{t("taskLinksHelp")}</small>
+            {links.fields.map((link, index) => (
+              <div className="task-link-row" key={link.rowKey}>
+                <label>
+                  {t("linkName")}
+                  <input
+                    required
+                    maxLength={120}
+                    placeholder={t("linkNamePlaceholder")}
+                    {...register(`links.${index}.title`)}
+                  />
+                </label>
+                <label>
+                  {t("linkAddress")}
+                  <input
+                    type="url"
+                    required
+                    maxLength={2048}
+                    placeholder="https://"
+                    {...register(`links.${index}.url`)}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label={t("removeTaskLink", { count: index + 1 })}
+                  onClick={() => links.remove(index)}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              className="quiet-button"
+              disabled={links.fields.length >= 20}
+              onClick={() => links.append({ title: "", url: "" })}
+            >
+              <Plus size={16} />
+              {t("addTaskLink")}
+            </button>
+          </fieldset>
+          <label>
+            {t("relatedItem")}
+            <select {...register("relatedDashboardItemId")}>
+              <option value="">{t("none")}</option>
+              {data.items.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.title}
                 </option>
               ))}
             </select>
           </label>
+          {error && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
         </div>
-        <div className="form-row">
-          <label>
-            {t("dueDate")}
-            <input type="date" {...register("dueDate")} />
-          </label>
-          <label>
-            {t("dueTime")}
-            <input type="time" {...register("dueTime")} />
-          </label>
-          <label>
-            {t("startDate")}
-            <input type="date" {...register("startDate")} />
-          </label>
-        </div>
-        <label>
-          {t("description")}
-          <textarea
-            rows={5}
-            maxLength={20000}
-            {...register("descriptionMarkdown")}
-          />
-        </label>
-        <details>
-          <summary>{t("preview")}</summary>
-          <Markdown text={watch("descriptionMarkdown")} />
-        </details>
-        <fieldset>
-          <legend>{t("tags")}</legend>
-          {data.tags.map((tag) => (
-            <label className="check" key={tag.id}>
-              <input type="checkbox" value={tag.id} {...register("tagIds")} />
-              {tag.name}
-            </label>
-          ))}
-        </fieldset>
-        <fieldset>
-          <legend>{t("checklist")}</legend>
-          {checklist.map((item, i) => (
-            <div className="checklist-row" key={item.id ?? i}>
-              <input
-                aria-label={t("complete") + " " + item.title}
-                type="checkbox"
-                checked={item.isChecked}
-                onChange={(e) =>
-                  setChecklist(
-                    checklist.map((x, j) =>
-                      i === j ? { ...x, isChecked: e.target.checked } : x,
-                    ),
-                  )
-                }
-              />
-              <input
-                required
-                aria-label={t("title") + " " + (i + 1)}
-                maxLength={200}
-                value={item.title}
-                onChange={(e) =>
-                  setChecklist(
-                    checklist.map((x, j) =>
-                      i === j ? { ...x, title: e.target.value } : x,
-                    ),
-                  )
-                }
-              />
-              <button
-                type="button"
-                onClick={() =>
-                  setChecklist(checklist.filter((_, j) => i !== j))
-                }
-              >
-                {t("remove")}
-              </button>
-            </div>
-          ))}
-          <button
-            type="button"
-            disabled={checklist.length >= 100}
-            onClick={() =>
-              setChecklist([...checklist, { title: "", isChecked: false }])
-            }
-          >
-            {t("add")}
-          </button>
-        </fieldset>
-        <fieldset>
-          <legend>{t("links")}</legend>
-          {links.map((link, i) => (
-            <div className="link-row" key={i}>
-              <input
-                required
-                maxLength={120}
-                aria-label={t("name") + " " + (i + 1)}
-                value={link.title}
-                onChange={(e) =>
-                  setLinks(
-                    links.map((x, j) =>
-                      i === j ? { ...x, title: e.target.value } : x,
-                    ),
-                  )
-                }
-              />
-              <input
-                type="url"
-                required
-                maxLength={2048}
-                aria-label={t("url") + " " + (i + 1)}
-                value={link.url}
-                onChange={(e) =>
-                  setLinks(
-                    links.map((x, j) =>
-                      i === j ? { ...x, url: e.target.value } : x,
-                    ),
-                  )
-                }
-              />
-              <button
-                type="button"
-                onClick={() => setLinks(links.filter((_, j) => i !== j))}
-              >
-                {t("remove")}
-              </button>
-            </div>
-          ))}
-          <button
-            type="button"
-            disabled={links.length >= 20}
-            onClick={() => setLinks([...links, { title: "", url: "" }])}
-          >
-            {t("add")}
-          </button>
-        </fieldset>
-        <label>
-          {t("relatedItem")}
-          <select {...register("relatedDashboardItemId")}>
-            <option value="">{t("none")}</option>
-            {data.items.map((x) => (
-              <option key={x.id} value={x.id}>
-                {x.title}
-              </option>
-            ))}
-          </select>
-        </label>
-        {error && (
-          <p className="error" role="alert">
-            {error}
-          </p>
-        )}
-        <footer>
-          <button className="primary" disabled={isSubmitting}>
-            {t("save")}
-          </button>
+        <footer className="task-editor-footer">
+          {task.id && (
+            <MenuButton
+              label={task.title ?? t("tasks")}
+              actions={[
+                ...[
+                  task.completedAt ? "reopen" : "complete",
+                  "duplicate",
+                  task.isArchived ? "unarchive" : "archive",
+                ].map((name) => ({
+                  id: name,
+                  label: t(name === "archive" ? "archiveAction" : name),
+                  disabled: isSubmitting,
+                  onSelect: () => void action(name),
+                })),
+                {
+                  id: "delete",
+                  label: t("delete"),
+                  danger: true,
+                  separator: true,
+                  disabled: isSubmitting,
+                  onSelect: () => void remove(),
+                },
+              ]}
+            />
+          )}
           <button type="button" onClick={onClose}>
             {t("cancel")}
           </button>
+          <button className="primary" disabled={isSubmitting}>
+            {t("save")}
+          </button>
         </footer>
-        {task.id && (
-          <div className="task-actions">
-            {[
-              task.completedAt ? "reopen" : "complete",
-              "duplicate",
-              task.isArchived ? "unarchive" : "archive",
-            ].map((a) => (
-              <button
-                type="button"
-                key={a}
-                disabled={isSubmitting}
-                onClick={() => void action(a)}
-              >
-                {t(a === "archive" ? "archiveAction" : a)}
-              </button>
-            ))}
-            <button
-              type="button"
-              className="danger"
-              onClick={() => void remove()}
-            >
-              {t("delete")}
-            </button>
-          </div>
-        )}
       </form>
     </Dialog>
   );

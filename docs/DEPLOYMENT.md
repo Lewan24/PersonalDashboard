@@ -8,7 +8,7 @@ Produkcyjna publikacja bez Dockera: `dotnet publish src/PersonalHub.Api -c Relea
 
 ## Compose
 
-Skopiuj `.env.example` jako `.env`, następnie `docker compose up --build -d`. Jedna usługa runtime na porcie 8088 hosta. `docker compose config --quiet` weryfikuje interpolację. `docker compose ps` i `docker inspect --format '{{.State.Health.Status}}' personal-hub` weryfikują gotowość. Healthcheck nie potrzebuje curl/wget.
+Uruchom `docker compose -f compose.build.yaml up --build -d`. Jedna usługa runtime na porcie 8088 hosta. `docker compose -f compose.build.yaml config --quiet` weryfikuje interpolację. `docker compose -f compose.build.yaml ps` i `docker inspect --format '{{.State.Health.Status}}' personal-hub` weryfikują gotowość. Healthcheck nie potrzebuje curl/wget.
 
 `HOST_PORT=8090` zmienia port. `BIND_ADDRESS=127.0.0.1` ogranicza publikację do localhost. Dla LAN użyj np. `BIND_ADDRESS=192.168.1.10` i `ALLOWED_HOSTS=localhost;127.0.0.1;[::1];192.168.1.10;hub.lan`. Zastosuj firewall. Nie ustawiaj publicznego bindu bez dodatkowej ochrony. Ustawienie timezone w UI steruje datami zadań; `TZ` dotyczy logów.
 
@@ -16,14 +16,15 @@ Dane: wolumen `personal_hub_data` montowany do `/app/data`. W środku są baza i
 
 ## Portainer
 
-Stack z repozytorium z kontekstem builda może używać `compose.yaml`, jeśli środowisko Portainera obsługuje budowanie. Web editor bez kontekstu: najpierw zbuduj i wypchnij własny obraz:
+Stack z repozytorium z kontekstem builda może używać `compose.build.yaml`, jeśli środowisko Portainera obsługuje budowanie. Web editor bez kontekstu: najpierw zbuduj i wypchnij własny obraz:
 
 ```text
-docker build -t registry.example.com/personal-hub:1.0.0 .
-docker push registry.example.com/personal-hub:1.0.0
+docker compose -f compose.build.yaml build
+docker tag personal-hub:local TWOJE_KONTO/personal-hub:1.0.0
+docker push TWOJE_KONTO/personal-hub:1.0.0
 ```
 
-Wklej `compose.image.yaml` i ustaw `PERSONAL_HUB_IMAGE` na swój obraz, wraz z HOST_PORT/BIND_ADDRESS/ALLOWED_HOSTS. Repo nie publikuje gotowego obrazu i nie podaje fikcyjnego registry. Zapisz nazwę wolumenu; zmiana nazwy stacka może utworzyć nowy wolumen zamiast podłączyć dotychczasowy.
+Wklej `compose.production.yaml` do edytora stacków w środowisku Docker Standalone. Ustaw `PERSONAL_HUB_IMAGE` w zmiennych stacka lub wpisz swój obraz bezpośrednio w polu `image`. W razie potrzeby ustaw też HOST_PORT/BIND_ADDRESS/ALLOWED_HOSTS. Sekcja Portainer korzysta z obrazu w rejestrze i wolumenu Dockera. Zapisz nazwę wolumenu; zmiana nazwy stacka może utworzyć nowy wolumen zamiast podłączyć dotychczasowy.
 
 ## Reverse proxy z TLS i auth
 
@@ -37,7 +38,7 @@ server {
     ssl_certificate_key /etc/ssl/hub/privkey.pem;
     auth_basic "Personal Hub";
     auth_basic_user_file /etc/nginx/personal-hub.htpasswd;
-    client_max_body_size 25m;
+    client_max_body_size 512m;
     location / {
         proxy_pass http://127.0.0.1:8088;
         proxy_set_header Host $http_host;
@@ -52,6 +53,6 @@ Dodaj `hub.example.com` do `ALLOWED_HOSTS` i pozostaw localhost dla healthchecka
 
 Brak auth w aplikacji oznacza, że należy objąć ochroną proxy także `/api`, eksporty, ikony i backupy. VPN jest alternatywą, jeśli dostęp mają wyłącznie zaufane urządzenia. Sam TLS nie ogranicza uprawnień.
 
-## Ograniczenie weryfikacji
+## Weryfikacja lokalna
 
-Składnia Compose została sprawdzona. Engine Docker nie działał (`dockerDesktopLinuxEngine` nie istnieje), więc build obrazu, uruchomienie healthy, non-root, read_only, nowy wolumen i przykład nginx są **NIE URUCHOMIONO**. Nie traktuj tych konfiguracji jako zaliczonych testów wdrożeniowych.
+Obraz zbudowano przez `compose.build.yaml`. Testowy stack uruchomiony z `compose.production.yaml` na lokalnym obrazie osiągnął stan `healthy` i udostępnił frontend oraz `/health/ready`. Wdrożenie w Portainerze wymaga opublikowanego obrazu.

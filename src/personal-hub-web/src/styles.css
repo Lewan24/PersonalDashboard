@@ -351,7 +351,7 @@ button.active,
 }
 .section-items {
   display: grid;
-  grid-template-columns: repeat(var(--section-desktop, 1), minmax(0, 1fr));
+  grid-template-columns: repeat(var(--section-desktop, 4), minmax(0, 1fr));
   gap: 2px;
   background: var(--surface);
   border-radius: var(--radius);
@@ -423,16 +423,6 @@ button.active,
   align-items: center;
   gap: 4px;
   padding: 4px 8px 8px;
-}
-.drag-handle {
-  border: 0;
-  padding: 3px;
-  cursor: grab;
-  color: var(--muted);
-  touch-action: none;
-}
-.drag-handle:active {
-  cursor: grabbing;
 }
 .move-controls {
   display: flex;
@@ -564,11 +554,6 @@ button.active,
 .priority-urgent {
   color: var(--danger);
 }
-.tag {
-  padding: 1px 5px;
-  border-radius: 3px;
-  background: var(--surface-hover);
-}
 .view-tabs {
   display: flex;
   gap: 8px;
@@ -681,29 +666,16 @@ summary {
   font-size: 0.85rem;
   margin-bottom: 14px;
 }
-.checklist-row,
-.link-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 8px;
-}
-.checklist-row button,
-.link-row button {
-  font-size: 0.75rem;
-}
-.task-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  border-top: 1px solid var(--border);
-  padding-top: 16px;
-  margin-top: 20px;
-}
 .data-actions {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+.database-backup-result {
+  flex-basis: 100%;
+}
+.database-backup-result p {
+  margin-bottom: 4px;
 }
 .file-label {
   border: 1px solid var(--border);
@@ -813,21 +785,6 @@ dd {
 .dialog-heading button {
   font-size: 0.8rem;
 }
-.palette-results {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 50vh;
-  overflow: auto;
-}
-.palette-results button {
-  justify-content: space-between;
-  text-align: left;
-  border: 0;
-}
-.palette-results .selected {
-  background: var(--surface-hover);
-}
 .markdown {
   font-size: 0.9rem;
   line-height: 1.65;
@@ -896,7 +853,7 @@ dd {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .section-items {
-    grid-template-columns: repeat(var(--section-tablet, 1), minmax(0, 1fr));
+    grid-template-columns: repeat(var(--section-tablet, 2), minmax(0, 1fr));
   }
   .mini-task-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -997,12 +954,6 @@ dd {
     width: calc(100vw - 20px);
     max-height: 94dvh;
   }
-  .link-row {
-    flex-wrap: wrap;
-  }
-  .link-row input {
-    min-width: 100%;
-  }
   .filters {
     gap: 12px;
   }
@@ -1012,9 +963,6 @@ dd {
   }
   .filters input[type="search"] {
     min-width: 100%;
-  }
-  .checklist-row button {
-    max-width: 90px;
   }
   .tabs .move-controls {
     flex-basis: 100%;

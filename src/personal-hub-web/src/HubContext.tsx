@@ -11,6 +11,7 @@ type Mutation = {
   method?: string;
   body?: unknown;
   optimistic?: (data: Bootstrap) => Bootstrap;
+  retryable?: boolean;
 };
 interface HubContextValue {
   data: Bootstrap;
@@ -68,7 +69,10 @@ export function HubProvider({ children }: { children: ReactNode }) {
         setError(message);
         setStatus("saveError");
         failed.current =
-          e instanceof ApiError && e.status === 409 ? null : input;
+          input.retryable === false ||
+          (e instanceof ApiError && e.status === 409)
+            ? null
+            : input;
         throw e;
       }
     };

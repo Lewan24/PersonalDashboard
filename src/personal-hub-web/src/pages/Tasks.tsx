@@ -1,27 +1,33 @@
 import { useEffect, useState } from "react";
-import type { DragEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Plus, SlidersHorizontal } from "lucide-react";
 import { useHub } from "../HubContext";
 import { api } from "../api";
-import type { TaskPage, Column } from "../types";
+import type { TaskPage, Column, HubTask } from "../types";
+import { makeSearch } from "../search";
 import { t } from "../i18n";
 import { TaskCard } from "../components/TaskCard";
 import { EntityEditor } from "../components/EntityEditor";
 import { Dialog } from "../components/Dialog";
-import { readDrag } from "../components/DragHandle";
+import { dropTarget, insertionIndex, useDragMotion } from "../components/drag";
+import type { DragData } from "../components/drag";
 import { MenuButton } from "../components/ActionMenu";
 import type { MenuAction } from "../components/ActionMenu";
 import { TaskColumnCard } from "../features/tasks/TaskColumnCard";
 import { QuickTaskInput } from "../features/tasks/QuickTaskInput";
 
-export default function Tasks() {
+export default function Tasks({
+  dashboardSearch,
+}: {
+  dashboardSearch: string;
+}) {
   useEffect(() => {
     if (window.location.hash === "#tasks")
       document.getElementById("tasks")?.scrollIntoView();
   }, []);
   const { data, setTask, mutate } = useHub();
+  const dragBoard = useDragMotion();
   const [params, setParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [priority, setPriority] = useState("");
@@ -34,7 +40,13 @@ export default function Tasks() {
   const [destination, setDestination] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [deletingBusy, setDeletingBusy] = useState(false);
-  const view = params.get("due") ?? "all";
+  const due = params.get("due");
+  const view =
+    due === "overdue" || due === "today"
+      ? "today"
+      : due === "archive"
+        ? "archive"
+        : "all";
   const queryParams = new URLSearchParams({
     q: search,
     priority,
@@ -54,6 +66,15 @@ export default function Tasks() {
     getNextPageParam: (page) => page.nextCursor ?? undefined,
   });
   const tasks = query.data?.pages.flatMap((page) => page.tasks) ?? [];
+  const searchPreview = makeSearch(dashboardSearch);
+  const matchTask = (task: HubTask) =>
+    searchPreview.active
+      ? searchPreview.matches(
+          task.title,
+          task.descriptionMarkdown,
+          ...task.tags.map((tag) => tag.name),
+        )
+      : undefined;
   const columns = data.columns.filter((x) => !x.isArchived);
   const addColumn = () =>
     setEditor({
@@ -111,28 +132,31 @@ export default function Tasks() {
       },
     ];
   }
-  function drop(
-    event: DragEvent,
+  function moveTask(
+    drag: DragData,
     column: Column,
-    index: number,
-    columnIndex: number,
+    target?: HubTask,
+    after = false,
   ) {
-    event.preventDefault();
-    event.stopPropagation();
-    const drag = readDrag(event);
-    if (drag?.kind === "task")
-      void mutate({
-        path: `/tasks/${drag.id}/move`,
-        body: {
-          targetColumnId: column.id,
-          targetIndex: index,
-          expectedVersion: drag.version,
-        },
-      }).catch(() => {});
-    else if (drag?.kind === "column") {
-      const source = data.columns.find((x) => x.id === drag.id);
-      if (source) void moveColumn(source, columnIndex).catch(() => {});
-    }
+    void mutate({
+      path: `/tasks/${drag.id}/move`,
+      body: {
+        targetColumnId: column.id,
+        ...(target
+          ? { targetTaskId: target.id, afterTarget: after }
+          : { targetIndex: 2147483647 }),
+        expectedVersion: drag.version,
+      },
+    }).catch(() => {});
+  }
+  function reorderColumn(drag: DragData, target: Column, after: boolean) {
+    const sourceIndex = data.columns.findIndex((x) => x.id === drag.id);
+    const targetIndex = data.columns.findIndex((x) => x.id === target.id);
+    if (sourceIndex >= 0)
+      void moveColumn(
+        data.columns[sourceIndex],
+        insertionIndex(targetIndex, sourceIndex, after),
+      ).catch(() => {});
   }
   async function removeColumn(archive: boolean) {
     if (!deleting || (!archive && !destination)) return;
@@ -149,16 +173,14 @@ export default function Tasks() {
       setDeletingBusy(false);
     }
   }
-  const badge = (id: string) =>
-    id === "today"
-      ? data.taskSummary.todayCount
-      : id === "overdue"
-        ? data.taskSummary.overdueCount
-        : id === "next7"
-          ? data.taskSummary.next7Count
-          : undefined;
   return (
-    <section id="tasks" className="task-module" aria-labelledby="tasks-heading">
+    <section
+      id="tasks"
+      className="task-module"
+      aria-labelledby="tasks-heading"
+      data-drag-board
+      ref={dragBoard}
+    >
       <div className="task-module-heading">
         <h2 id="tasks-heading">{t("tasks")}</h2>
         <QuickTaskInput />
@@ -182,27 +204,27 @@ export default function Tasks() {
       </div>
       <div className="task-navigation">
         <div className="view-tabs">
-          {["all", "today", "overdue", "next7", "archive", "none"].map((id) => (
+          {["all", "today", "archive"].map((id) => (
             <button
               key={id}
               className={view === id ? "active" : ""}
               aria-pressed={view === id}
-              onDragOver={(e) => {
-                if (id === "today") e.preventDefault();
-              }}
-              onDrop={(e) => {
-                const drag = readDrag(e);
-                if (id === "today" && drag?.kind === "task") {
-                  e.preventDefault();
-                  void mutate({
-                    path: `/tasks/${drag.id}/move`,
-                    body: {
-                      targetColumnId: "today",
-                      expectedVersion: drag.version,
-                    },
-                  }).catch(() => {});
-                }
-              }}
+              {...(id === "today" &&
+                dropTarget(
+                  (drag) =>
+                    drag.kind === "task" && drag.canSchedule
+                      ? "inside"
+                      : undefined,
+                  (drag) => {
+                    void mutate({
+                      path: `/tasks/${drag.id}/move`,
+                      body: {
+                        targetColumnId: "today",
+                        expectedVersion: drag.version,
+                      },
+                    }).catch(() => {});
+                  },
+                ))}
               onClick={() =>
                 setParams(
                   (previous) => {
@@ -215,14 +237,10 @@ export default function Tasks() {
                 )
               }
             >
-              {t(id === "none" ? "noDue" : id)}
-              {badge(id) !== undefined && (
-                <span
-                  className={
-                    id === "overdue" && badge(id) ? "overdue count" : "count"
-                  }
-                >
-                  {badge(id)}
+              {t(id)}
+              {id === "today" && (
+                <span className="count">
+                  {data.taskSummary.todayCount + data.taskSummary.overdueCount}
                 </span>
               )}
             </button>
@@ -325,14 +343,26 @@ export default function Tasks() {
               tasks={tasks.filter((x) => x.columnId === column.id)}
               actions={columnActions(column, index)}
               onAdd={() => setTask({ columnId: column.id })}
-              onDrop={(event, i) => drop(event, column, i, index)}
+              onEdit={() => setEditor({ ...column })}
+              manualOrder={sort === "order"}
+              matchTask={matchTask}
+              onMoveTask={(drag, target, after) =>
+                moveTask(drag, column, target, after)
+              }
+              onReorder={(drag, after) => reorderColumn(drag, column, after)}
             />
           ))}
         </div>
       ) : (
         <div className="task-list">
           {tasks.map((task, index) => (
-            <TaskCard key={task.id} task={task} index={index} projection />
+            <TaskCard
+              key={task.id}
+              task={task}
+              index={index}
+              projection
+              searchMatch={matchTask(task)}
+            />
           ))}
           {!tasks.length && <p className="empty">{t("emptyTasks")}</p>}
         </div>

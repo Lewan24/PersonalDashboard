@@ -1,6 +1,10 @@
 services:
   personal-hub:
-    image: "${PERSONAL_HUB_IMAGE:?Set PERSONAL_HUB_IMAGE to your published registry image}"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: personal-hub:local
+    container_name: personal-hub
     restart: unless-stopped
     ports:
       - "${BIND_ADDRESS:-127.0.0.1}:${HOST_PORT:-8088}:8080"
@@ -13,9 +17,12 @@ services:
     volumes:
       - personal_hub_data:/app/data
     read_only: true
-    tmpfs: [/tmp]
+    tmpfs:
+      - /tmp
     cap_drop: [ALL]
-    security_opt: [no-new-privileges:true]
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
     healthcheck:
       test: [CMD, dotnet, PersonalHub.Api.dll, --healthcheck]
       interval: 30s

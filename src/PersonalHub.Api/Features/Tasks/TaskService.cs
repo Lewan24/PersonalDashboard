@@ -6,7 +6,7 @@ namespace PersonalHub.Api.Features.Tasks;
 
 public class TaskService(HubDb db, SettingsService settings, TimeProvider clock)
 {
-    public IQueryable<HubTask> Query => db.Tasks.Include(x => x.Tags).Include(x => x.Checklist).Include(x => x.Links).AsSplitQuery();
+    public IQueryable<HubTask> Query => db.Tasks.Include(x => x.Tags).Include(x => x.Checklist.OrderBy(item => item.SortOrder)).Include(x => x.Links.OrderBy(link => link.SortOrder)).AsSplitQuery();
     public async Task<HubTask> Find(Guid id) => await Query.SingleOrDefaultAsync(x => x.Id == id) ?? throw new DomainError(404, "Nie znaleziono zadania.");
     public async Task<List<HubTask>> Projection(string view)
     {
@@ -17,7 +17,7 @@ public class TaskService(HubDb db, SettingsService settings, TimeProvider clock)
         {
             "overdue" => query.Where(x => x.DueDate < today),
             "next7" => query.Where(x => x.DueDate >= today && x.DueDate <= end),
-            _ => (await settings.Read())["showOverdueInToday"].GetBoolean() ? query.Where(x => x.DueDate <= today) : query.Where(x => x.DueDate == today)
+            _ => query.Where(x => x.DueDate <= today)
         };
         return (await query.ToListAsync()).OrderByDescending(x => PriorityRank(x.Priority)).ThenBy(x => x.DueTime == null).ThenBy(x => x.DueTime).ThenBy(x => x.Title, StringComparer.CurrentCultureIgnoreCase).ToList();
     }
@@ -41,12 +41,19 @@ public class TaskService(HubDb db, SettingsService settings, TimeProvider clock)
         if (await db.Tasks.CountAsync(x => x.Id != task.Id) >= 20000) throw new DomainError(422, "Limit 20000 zadań.");
         task.CompletedAt = column.IsDone ? task.CompletedAt ?? clock.GetUtcNow().UtcDateTime : null;
     }
-    public async Task Move(HubTask task, Guid target, int index)
+    public async Task Move(HubTask task, Guid target, int index, Guid? anchor = null, bool after = false)
     {
         var column = await db.Columns.FindAsync(target) ?? throw new DomainError(422, "Nieznana kolumna.");
         if (column.IsArchived) throw new DomainError(422, "Kolumna jest w archiwum.");
         var source = task.ColumnId;
-        var rows = await db.Tasks.Where(x => x.ColumnId == source || x.ColumnId == target).OrderBy(x => x.SortOrder).ToListAsync();
+        var rows = await db.Tasks.Where(x => x.ColumnId == source || x.ColumnId == target).OrderBy(x => x.SortOrder).ThenBy(x => x.Id).ToListAsync();
+        if (anchor != null)
+        {
+            var destination = rows.Where(x => x.ColumnId == target && x.Id != task.Id).ToList();
+            index = destination.FindIndex(x => x.Id == anchor);
+            if (index < 0) throw new DomainError(409, "Zadanie docelowe zmieniło pozycję. Odświeżono tablicę.");
+            if (after) index++;
+        }
         if (column.IsDone && task.CompletedAt == null) { task.LastActiveColumnId = source; task.CompletedAt = clock.GetUtcNow().UtcDateTime; }
         if (!column.IsDone) task.CompletedAt = null;
         task.ColumnId = target;

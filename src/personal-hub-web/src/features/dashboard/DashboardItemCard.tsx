@@ -3,7 +3,8 @@ import type { CSSProperties } from "react";
 import type { Item } from "../../types";
 import type { DashboardActions } from "./useDashboardActions";
 import { ActionMenu, MenuButton } from "../../components/ActionMenu";
-import { DragHandle, readDrag } from "../../components/DragHandle";
+import { dragSource, dropTarget, insertionIndex } from "../../components/drag";
+import { TagBadge } from "../../components/Tags";
 import { Icon } from "../../components/Icon";
 import { Markdown } from "../../components/Markdown";
 import { safeUrl } from "../../api";
@@ -13,21 +14,39 @@ export function DashboardItemCard({
   index,
   actions,
   favorite = false,
+  searchMatch,
 }: {
   item: Item;
   index: number;
   actions: DashboardActions;
   favorite?: boolean;
+  searchMatch?: boolean;
 }) {
   const { data } = useHub();
   const menu = actions.itemActions(item);
+  const openEditor = () =>
+    actions.setEditor({
+      kind: "items",
+      value: { ...item, tagIds: item.tags.map((tag) => tag.id) },
+    });
+  const tags = item.tags.length > 0 && (
+    <span className="item-tags">
+      {item.tags.map((tag) => (
+        <TagBadge key={tag.id} tag={tag} />
+      ))}
+    </span>
+  );
   const content = (
     <>
-      <Icon name={item.iconKey} />
+      <Icon name={item.iconKey} url={item.url} />
       <span className="item-copy">
         <strong>{item.title}</strong>
         {["detailed-link", "service-card"].includes(item.itemType) &&
           item.description && <span>{item.description}</span>}
+        {item.showUrl && safeUrl(item.url) && (
+          <span className="item-address">{item.url}</span>
+        )}
+        {tags}
       </span>
     </>
   );
@@ -37,50 +56,87 @@ export function DashboardItemCard({
         className={"dashboard-item " + item.itemType}
         style={{ "--entity-accent": item.accentColor } as CSSProperties}
         tabIndex={item.itemType === "note" ? 0 : undefined}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => {
-          const drag = readDrag(e);
-          if (drag?.kind === "item") {
-            e.preventDefault();
-            e.stopPropagation();
-            const source = data.items.find((x) => x.id === drag.id);
-            if (source)
+        data-search-match={searchMatch}
+        {...(!favorite &&
+          dragSource(
+            {
+              kind: "item",
+              id: item.id,
+              container: item.sectionId,
+              version: item.version,
+            },
+            openEditor,
+          ))}
+        data-drag-card={favorite ? undefined : "item:" + item.id}
+        {...(!favorite &&
+          dropTarget(
+            (drag) =>
+              drag.kind === "item"
+                ? drag.id === item.id
+                  ? "self"
+                  : "grid"
+                : undefined,
+            (drag, position) => {
+              const source = data.items.find((x) => x.id === drag.id);
+              if (!source) return;
+              const sourceIndex = data.items
+                .filter((x) => x.sectionId === item.sectionId)
+                .findIndex((x) => x.id === source.id);
               void actions
-                .itemMove(source, item.sectionId, index)
+                .itemMove(
+                  source,
+                  item.sectionId,
+                  insertionIndex(index, sourceIndex, position === "after"),
+                )
                 .catch(() => {});
-          }
-        }}
+            },
+          ))}
       >
         {item.itemType === "note" ? (
           <div className="note-content">
-            <h3>{item.title}</h3>
+            <h3>
+              <button
+                type="button"
+                className="text-button entity-heading-button"
+                data-drag-trigger
+                onClick={openEditor}
+              >
+                {item.title}
+              </button>
+            </h3>
             <Markdown text={item.description} />
+            {tags}
           </div>
         ) : item.itemType === "spacer" ? (
-          <div className="spacer" aria-label={t("spacer")} />
+          <button
+            type="button"
+            className="spacer spacer-button"
+            aria-label={t("spacer")}
+            data-drag-trigger
+            onClick={openEditor}
+          />
         ) : safeUrl(item.url) ? (
           <a
+            data-drag-trigger
             className="item-main"
             href={item.url!}
+            aria-label={item.title}
             target={item.openInNewTab ? "_blank" : undefined}
             rel={item.openInNewTab ? "noopener noreferrer" : undefined}
           >
             {content}
           </a>
         ) : (
-          <div className="item-main">{content}</div>
+          <button
+            type="button"
+            className="item-main"
+            data-drag-trigger
+            onClick={openEditor}
+          >
+            {content}
+          </button>
         )}
         <div className="item-controls">
-          {!favorite && (
-            <DragHandle
-              data={{
-                kind: "item",
-                id: item.id,
-                container: item.sectionId,
-                version: item.version,
-              }}
-            />
-          )}
           <MenuButton label={item.title} actions={menu} />
         </div>
       </article>

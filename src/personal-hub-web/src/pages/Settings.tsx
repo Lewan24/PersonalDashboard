@@ -1,30 +1,31 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useHub } from "../HubContext";
 import { api } from "../api";
-import type { Settings as SettingsType } from "../types";
+import type { Bootstrap, IconInfo, Settings as SettingsType } from "../types";
 import { t } from "../i18n";
+import { TagBadge } from "../components/Tags";
+import { DatabaseTransfer } from "../features/database/DatabaseTransfer";
+import { HomepageImport } from "../features/homepage/HomepageImport";
 import { Dialog } from "../components/Dialog";
 interface Preview {
   previewToken: string;
   counts: Record<string, number>;
 }
-interface IconInfo {
-  id: string;
-  fileName: string;
-  sizeBytes: number;
-}
 export default function Settings() {
   const { data, mutate } = useHub();
+  const queries = useQueryClient();
   const {
     register,
+    reset,
     handleSubmit,
     formState: { isSubmitting },
   } = useForm<SettingsType>({ defaultValues: data.settings });
   const [message, setMessage] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
   const [tagName, setTagName] = useState("");
+  const [tagColor, setTagColor] = useState(data.settings.accent);
   const icons = useQuery({
     queryKey: ["icons"],
     queryFn: () => api<IconInfo[]>("/icons"),
@@ -83,14 +84,20 @@ export default function Settings() {
       />
     </label>
   );
-  const check = (
-    key: "clockVisible" | "clockSeconds" | "showOverdueInToday" | "quickAccess",
-  ) => (
+  const check = (key: "clockVisible" | "clockSeconds" | "quickAccess") => (
     <label className="check" key={key}>
       <input type="checkbox" {...register(key)} />
       {t(key)}
     </label>
   );
+  function resetDatabaseForm() {
+    const settings =
+      queries.getQueryData<Bootstrap>(["bootstrap"])?.settings ?? data.settings;
+    reset(settings);
+    setTagName("");
+    setTagColor(settings.accent);
+  }
+
   async function importFile(file: File) {
     if (file.size > 25 * 1024 * 1024) {
       setMessage("25 MB");
@@ -140,7 +147,6 @@ export default function Settings() {
             {check("clockSeconds")}
             {select("clockFormat", ["24", "12"])}
             {select("dateFormat", ["long", "short"])}
-            {check("showOverdueInToday")}
             {check("quickAccess")}
             <label>
               {t("language")}
@@ -163,6 +169,78 @@ export default function Settings() {
         </section>
         <div>
           <section>
+            <h2>{t("tags")}</h2>
+            <form
+              className="quick-add"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void run({
+                  path: "/tags",
+                  body: { name: tagName, color: tagColor },
+                }).then((ok) => {
+                  if (ok) setTagName("");
+                });
+              }}
+            >
+              <label className="grow">
+                {t("tagName")}
+                <input
+                  required
+                  maxLength={40}
+                  value={tagName}
+                  onChange={(e) => setTagName(e.target.value)}
+                />
+              </label>
+              <label>
+                {t("tagColor")}
+                <input
+                  type="color"
+                  value={tagColor}
+                  onChange={(e) => setTagColor(e.target.value)}
+                />
+              </label>
+              <button>{t("add")}</button>
+            </form>
+            <ul className="tag-settings-list">
+              {data.tags.map((x) => (
+                <li key={x.id}>
+                  <TagBadge tag={x} />
+                  <form
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      const color = new FormData(event.currentTarget).get(
+                        "color",
+                      );
+                      if (color === x.color) return;
+                      void run({
+                        path: "/tags/" + x.id,
+                        method: "PATCH",
+                        body: { color, expectedVersion: x.version },
+                      });
+                    }}
+                  >
+                    <input
+                      type="color"
+                      name="color"
+                      aria-label={t("changeTagColor", { name: x.name })}
+                      defaultValue={x.color}
+                      key={x.version}
+                    />
+                    <button>{t("save")}</button>
+                  </form>
+                  <button
+                    onClick={() => {
+                      if (confirm(t("confirmDelete")))
+                        void run({ path: "/tags/" + x.id, method: "DELETE" });
+                    }}
+                  >
+                    {t("delete")}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+          <section>
             <h2>{t("data")}</h2>
             <div className="data-actions">
               <a className="button" href="/api/v1/export/json">
@@ -180,9 +258,7 @@ export default function Settings() {
                   }}
                 />
               </label>
-              <a className="button" href="/api/v1/backup/sqlite">
-                {t("backupDownload")}
-              </a>
+              <DatabaseTransfer onReplaced={resetDatabaseForm} />
               <button onClick={() => void run({ path: "/backup/create" })}>
                 {t("backupCreate")}
               </button>
@@ -195,6 +271,7 @@ export default function Settings() {
                 {t("seed")}
               </button>
             </div>
+            <HomepageImport />
             <h3>{t("backups")}</h3>
             <ul className="backup-list">
               {backups.data?.map((x) => (
@@ -245,47 +322,6 @@ export default function Settings() {
                     onClick={() => {
                       if (confirm(t("confirmDelete")))
                         void run({ path: "/icons/" + x.id, method: "DELETE" });
-                    }}
-                  >
-                    {t("delete")}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-          <section>
-            <h2>{t("tags")}</h2>
-            <form
-              className="quick-add"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void run({
-                  path: "/tags",
-                  body: { name: tagName, color: data.settings.accent },
-                }).then((ok) => {
-                  if (ok) setTagName("");
-                });
-              }}
-            >
-              <label className="grow">
-                {t("tagName")}
-                <input
-                  required
-                  maxLength={40}
-                  value={tagName}
-                  onChange={(e) => setTagName(e.target.value)}
-                />
-              </label>
-              <button>{t("add")}</button>
-            </form>
-            <ul>
-              {data.tags.map((x) => (
-                <li key={x.id}>
-                  {x.name}{" "}
-                  <button
-                    onClick={() => {
-                      if (confirm(t("confirmDelete")))
-                        void run({ path: "/tags/" + x.id, method: "DELETE" });
                     }}
                   >
                     {t("delete")}

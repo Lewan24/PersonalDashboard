@@ -11,9 +11,9 @@ public static class TaskEndpoints
     private static readonly string[] Fields = ["title", "descriptionMarkdown", "columnId", "priority", "dueDate", "dueTime", "startDate", "tagIds", "relatedDashboardItemId"];
     public static void MapTasks(this RouteGroupBuilder api)
     {
-        api.MapGet("/tasks/today", async (TaskService service, SettingsService settings) => new { today = await settings.Today(), tasks = await service.Projection("today") });
-        api.MapGet("/tasks/overdue", async (TaskService service, SettingsService settings) => new { today = await settings.Today(), tasks = await service.Projection("overdue") });
-        api.MapGet("/tasks/summary", (TaskService service) => service.Summary());
+        api.MapGet("/tasks/today", async (TaskService service, SettingsService settings) => new { today = await settings.Today(), tasks = await service.Projection("today") }).CacheOutput("hub-data");
+        api.MapGet("/tasks/overdue", async (TaskService service, SettingsService settings) => new { today = await settings.Today(), tasks = await service.Projection("overdue") }).CacheOutput("hub-data");
+        api.MapGet("/tasks/summary", (TaskService service) => service.Summary()).CacheOutput("hub-data");
         api.MapGet("/tasks", async (HttpRequest request, HubDb db, TaskService service, SettingsService settings) =>
         {
             var q = request.Query; var query = service.Query.AsNoTracking();
@@ -28,7 +28,7 @@ public static class TaskEndpoints
             var today = await settings.Today(); var end = today.AddDays(6);
             query = q["due"].ToString() switch
             {
-                "today" => (await settings.Read())["showOverdueInToday"].GetBoolean() ? query.Where(x => x.CompletedAt == null && x.DueDate <= today) : query.Where(x => x.CompletedAt == null && x.DueDate == today),
+                "today" => query.Where(x => x.CompletedAt == null && x.DueDate <= today),
                 "overdue" => query.Where(x => x.CompletedAt == null && x.DueDate < today),
                 "next7" => query.Where(x => x.CompletedAt == null && x.DueDate >= today && x.DueDate <= end),
                 "none" => query.Where(x => x.DueDate == null), _ => query
@@ -47,7 +47,7 @@ public static class TaskEndpoints
                 };
             var tasks = await ordered.ThenBy(x => x.Id).Skip(offset).Take(limit).ToListAsync();
             return new { today, tasks, total = count, nextCursor = offset + limit < count ? (offset + limit).ToString() : null };
-        });
+        }).CacheOutput("hub-data");
         api.MapGet("/tasks/{id:guid}", (Guid id, TaskService service) => service.Find(id));
         api.MapPost("/tasks", async (JsonElement body, HubDb db, TaskService service) =>
         {
@@ -71,7 +71,13 @@ public static class TaskEndpoints
                 if (task.CompletedAt != null || task.IsArchived) throw new DomainError(422, "Tylko aktywne, nieukończone zadanie można przenieść do Dzisiaj.");
                 task.DueDate = await settings.Today();
             }
-            else await service.Move(task, Validation.Id(body, "targetColumnId"), Validation.Index(body));
+            else
+            {
+                var columnId = Validation.Id(body, "targetColumnId");
+                if (body.TryGetProperty("targetTaskId", out _))
+                    await service.Move(task, columnId, 0, Validation.Id(body, "targetTaskId"), body.TryGetProperty("afterTarget", out var after) && after.ValueKind == JsonValueKind.True);
+                else await service.Move(task, columnId, Validation.Index(body));
+            }
             await db.SaveChangesAsync(); return new { task, columns = await db.Tasks.Where(x => x.ColumnId == task.ColumnId).OrderBy(x => x.SortOrder).Select(x => new { x.Id, x.SortOrder, x.Version }).ToListAsync() };
         });
         foreach (var action in new[] { "complete", "reopen", "archive", "unarchive", "duplicate" })
@@ -100,18 +106,49 @@ public static class TaskEndpoints
     private static async Task Collections(HubDb db, HubTask task, JsonElement body)
     {
         await DashboardEndpoints.SetTags(db, task.Tags, body);
+        var isUpdate = db.Entry(task).State != EntityState.Detached;
         if (body.TryGetProperty("checklist", out var checklist))
         {
-            var previous = task.Checklist.ToDictionary(x => x.Id); var result = new List<ChecklistItem>();
+            var previous = task.Checklist.ToDictionary(x => x.Id);
+            var result = new List<ChecklistItem>();
             foreach (var row in checklist.EnumerateArray())
             {
                 ChecklistItem item;
-                if (row.TryGetProperty("id", out var p) && p.TryGetGuid(out var id)) item = previous.GetValueOrDefault(id) ?? throw new DomainError(422, "Nieznana pozycja checklisty."); else item = new ChecklistItem();
-                item.Title = row.GetProperty("title").GetString()!; item.IsChecked = row.TryGetProperty("isChecked", out var check) && check.GetBoolean(); result.Add(item);
+                if (row.TryGetProperty("id", out var field) && field.TryGetGuid(out var id))
+                    item = previous.GetValueOrDefault(id) ?? throw new DomainError(422, "Nieznana pozycja checklisty.");
+                else
+                {
+                    item = new ChecklistItem { TaskId = task.Id };
+                    if (isUpdate) db.Add(item);
+                }
+                item.Title = row.GetProperty("title").GetString()!;
+                item.IsChecked = row.TryGetProperty("isChecked", out var check) && check.GetBoolean();
+                result.Add(item);
             }
-            if (result.Select(x => x.Id).Distinct().Count() != result.Count) throw new DomainError(422, "Powtórzone ID checklisty."); task.Checklist = result;
+            if (result.Select(x => x.Id).Distinct().Count() != result.Count) throw new DomainError(422, "Powtórzone ID checklisty.");
+            task.Checklist = result;
         }
-        if (body.TryGetProperty("links", out var links)) task.Links = links.EnumerateArray().Select(x => new TaskLink { Title = x.GetProperty("title").GetString()!, Url = x.GetProperty("url").GetString()! }).ToList();
+        if (body.TryGetProperty("links", out var links))
+        {
+            var previous = task.Links.ToDictionary(x => x.Id);
+            var result = new List<TaskLink>();
+            foreach (var row in links.EnumerateArray())
+            {
+                TaskLink link;
+                if (row.TryGetProperty("id", out var field) && field.TryGetGuid(out var id))
+                    link = previous.GetValueOrDefault(id) ?? throw new DomainError(422, "Nieznany link zadania.");
+                else
+                {
+                    link = new TaskLink { TaskId = task.Id };
+                    if (isUpdate) db.Add(link);
+                }
+                link.Title = row.GetProperty("title").GetString()!;
+                link.Url = row.GetProperty("url").GetString()!;
+                result.Add(link);
+            }
+            if (result.Select(x => x.Id).Distinct().Count() != result.Count) throw new DomainError(422, "Powtórzone ID linków.");
+            task.Links = result;
+        }
     }
     private static void MapColumns(RouteGroupBuilder api)
     {

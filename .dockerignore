@@ -7,3 +7,5 @@
 .git
 docs/e2e-*
 **/test-results
+
+homepagedata

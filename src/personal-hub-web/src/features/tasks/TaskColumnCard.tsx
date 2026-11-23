@@ -1,23 +1,32 @@
-import type { DragEvent, CSSProperties } from "react";
+import type { CSSProperties } from "react";
 import { Plus } from "lucide-react";
 import type { Column, HubTask } from "../../types";
 import { ActionMenu, MenuButton } from "../../components/ActionMenu";
 import type { MenuAction } from "../../components/ActionMenu";
 import { TaskCard } from "../../components/TaskCard";
-import { DragHandle } from "../../components/DragHandle";
+import { dragSource, dropTarget } from "../../components/drag";
+import type { DragData } from "../../components/drag";
 import { t } from "../../i18n";
 export function TaskColumnCard({
   column,
   tasks,
   actions,
   onAdd,
-  onDrop,
+  onEdit,
+  onMoveTask,
+  onReorder,
+  manualOrder,
+  matchTask,
 }: {
   column: Column;
   tasks: HubTask[];
   actions: MenuAction[];
   onAdd: () => void;
-  onDrop: (event: DragEvent, index: number) => void;
+  onEdit: () => void;
+  onMoveTask: (drag: DragData, target?: HubTask, after?: boolean) => void;
+  onReorder: (drag: DragData, after: boolean) => void;
+  manualOrder: boolean;
+  matchTask: (task: HubTask) => boolean | undefined;
 }) {
   const wip = tasks.filter((x) => !x.completedAt && !x.isArchived).length;
   return (
@@ -25,26 +34,46 @@ export function TaskColumnCard({
       <section
         className="kanban-column"
         style={{ "--column-accent": column.color } as CSSProperties}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => onDrop(e, tasks.length)}
+        {...dragSource(
+          {
+            kind: "column",
+            id: column.id,
+            container: "columns",
+            version: column.version,
+          },
+          onEdit,
+        )}
+        data-drag-card={"column:" + column.id}
+        {...dropTarget(
+          (drag) =>
+            drag.kind === "task" &&
+            (manualOrder || drag.container !== column.id)
+              ? "inside"
+              : drag.kind === "column" && drag.id !== column.id
+                ? "grid"
+                : undefined,
+          (drag, position) => {
+            if (drag.kind === "task") onMoveTask(drag);
+            else onReorder(drag, position === "after");
+          },
+        )}
       >
         <div className="section-heading">
           <h3>
-            {column.name}{" "}
+            <button
+              type="button"
+              className="text-button entity-heading-button"
+              data-drag-trigger
+              onClick={onEdit}
+            >
+              {column.name}
+            </button>{" "}
             <span className="count">
               {tasks.length}
               {column.wipLimit ? " / " + column.wipLimit : ""}
             </span>
           </h3>
           <div className="column-tools">
-            <DragHandle
-              data={{
-                kind: "column",
-                id: column.id,
-                container: "columns",
-                version: column.version,
-              }}
-            />
             <button
               className="icon-button"
               aria-label={t("addTask") + " · " + column.name}
@@ -63,10 +92,24 @@ export function TaskColumnCard({
         {tasks.map((task, index) => (
           <div
             key={task.id}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => onDrop(e, index)}
+            {...(manualOrder &&
+              dropTarget(
+                (drag) =>
+                  drag.kind === "task"
+                    ? drag.id === task.id
+                      ? "self"
+                      : "vertical"
+                    : undefined,
+                (drag, position) =>
+                  onMoveTask(drag, task, position === "after"),
+              ))}
           >
-            <TaskCard task={task} index={index} showStatus={false} />
+            <TaskCard
+              task={task}
+              index={index}
+              showStatus={false}
+              searchMatch={matchTask(task)}
+            />
           </div>
         ))}
         {!tasks.length && (

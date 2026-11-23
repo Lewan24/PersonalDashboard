@@ -35,6 +35,7 @@ export interface Item extends Entity {
   iconKey: string;
   accentColor: string;
   openInNewTab: boolean;
+  showUrl?: boolean;
   isFavorite: boolean;
   tags: Tag[];
 }
@@ -51,6 +52,7 @@ export interface Checklist {
   isChecked: boolean;
 }
 export interface TaskLink {
+  id?: string;
   title: string;
   url: string;
 }
@@ -108,4 +110,10 @@ export interface TaskPage {
   tasks: HubTask[];
   total: number;
   nextCursor: string | null;
+}
+
+export interface IconInfo {
+  id: string;
+  fileName: string;
+  sizeBytes: number;
 }

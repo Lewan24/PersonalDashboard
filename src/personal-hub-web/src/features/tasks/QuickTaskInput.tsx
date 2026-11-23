@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { useHub } from "../../HubContext";
 import { t } from "../../i18n";
@@ -7,9 +7,12 @@ export function QuickTaskInput() {
   const [title, setTitle] = useState("");
   const [due, setDue] = useState(true);
   const [busy, setBusy] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
   const column = data.columns.find((x) => !x.isArchived && !x.isDone);
   async function add() {
-    if (!title.trim() || !column) return;
+    if (!title.trim() || !column || busy) return;
+    const submittedTitle = title;
+    setTitle("");
     setBusy(true);
     try {
       await mutate({
@@ -20,8 +23,8 @@ export function QuickTaskInput() {
           dueDate: due ? data.today : null,
         },
       });
-      setTitle("");
     } catch {
+      setTitle((draft) => draft || submittedTitle);
     } finally {
       setBusy(false);
     }
@@ -37,12 +40,16 @@ export function QuickTaskInput() {
       <label className="grow">
         <span className="sr-only">{t("quickTitle")}</span>
         <input
+          ref={input}
           required
           maxLength={200}
-          disabled={!column || busy}
+          disabled={!column}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder={t("quickTitle")}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") event.currentTarget.blur();
+          }}
         />
       </label>
       <label className="check">
@@ -57,6 +64,7 @@ export function QuickTaskInput() {
         type="submit"
         className="icon-button"
         aria-label={t("add")}
+        onClick={() => input.current?.focus()}
         disabled={!column || busy || !title.trim()}
       >
         <Plus size={16} />

@@ -4,6 +4,7 @@ import { useHub } from "../../HubContext";
 import type { Item, Section, Tab } from "../../types";
 import type { MenuAction } from "../../components/ActionMenu";
 import type { MoveRequest } from "../../components/MoveDialog";
+import { automaticIcon } from "../../components/Icon";
 import { t } from "../../i18n";
 
 export interface DashboardEditor {
@@ -87,9 +88,10 @@ export function useDashboardActions(activeTab?: Tab) {
         url: "",
         description: "",
         itemType: "compact-link",
-        iconKey: "lucide:link",
+        iconKey: automaticIcon,
         accentColor: data.settings.accent,
         openInNewTab: true,
+        showUrl: false,
         isFavorite: false,
         tagIds: [],
       },

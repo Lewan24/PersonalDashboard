@@ -1,35 +1,104 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import type { CSSProperties } from "react";
 import { Plus } from "lucide-react";
 import { useHub } from "../HubContext";
+import { makeSearch } from "../search";
 import { t } from "../i18n";
+import { Icon } from "../components/Icon";
 import { ActionMenu, MenuButton } from "../components/ActionMenu";
 import { EntityEditor } from "../components/EntityEditor";
 import { MoveDialog } from "../components/MoveDialog";
 import { ConfirmDelete } from "../components/ConfirmDelete";
-import { DragHandle, readDrag } from "../components/DragHandle";
+import {
+  dragSource,
+  dropTarget,
+  insertionIndex,
+  useDragMotion,
+} from "../components/drag";
 import { DashboardSectionCard } from "../features/dashboard/DashboardSectionCard";
 import { DashboardItemCard } from "../features/dashboard/DashboardItemCard";
 import { useDashboardActions } from "../features/dashboard/useDashboardActions";
 const TaskModule = lazy(() => import("./Tasks"));
 
-export default function Dashboard() {
+export default function Dashboard({ search = "" }: { search?: string }) {
   const { data, mutate } = useHub();
+  const dragBoard = useDragMotion<HTMLDivElement>();
   const [selected, setSelected] = useState(
     () => localStorage.getItem("activeTab") ?? "",
   );
-  useEffect(() => {
-    const sync = () => setSelected(localStorage.getItem("activeTab") ?? "");
-    window.addEventListener("personalhub-tab", sync);
-    return () => window.removeEventListener("personalhub-tab", sync);
-  }, []);
+  const [searchTab, setSearchTab] = useState<string | null>(null);
+  const [previousSearch, setPreviousSearch] = useState(search);
+  if (previousSearch !== search) {
+    setPreviousSearch(search);
+    setSearchTab(null);
+  }
+  const { active: searching, matches } = makeSearch(search);
   const tabs = data.tabs.filter((tab) => !tab.isHidden);
-  const active = tabs.find((tab) => tab.id === selected) ?? tabs[0];
-  const sections = data.sections.filter(
+  const visibleTabIds = new Set(tabs.map((tab) => tab.id));
+  const visibleSections = data.sections.filter((section) =>
+    visibleTabIds.has(section.tabId),
+  );
+  const matchingCards = searching
+    ? data.items.filter(
+        (item) =>
+          item.itemType !== "spacer" &&
+          matches(
+            item.title,
+            item.description,
+            item.url,
+            ...item.tags.map((tag) => tag.name),
+          ),
+      )
+    : [];
+  const matchingItems = new Set(matchingCards.map((item) => item.id));
+  const sectionsWithMatches = new Set(
+    matchingCards.map((item) => item.sectionId),
+  );
+  const matchingSections = new Set(
+    searching
+      ? visibleSections
+          .filter(
+            (section) =>
+              sectionsWithMatches.has(section.id) ||
+              matches(section.name, section.description),
+          )
+          .map((section) => section.id)
+      : [],
+  );
+  const tabsWithMatches = new Set(
+    visibleSections
+      .filter((section) => matchingSections.has(section.id))
+      .map((section) => section.tabId),
+  );
+  const tabMatches = (tab: (typeof tabs)[number]) =>
+    tabsWithMatches.has(tab.id) || matches(tab.name);
+  const tabsWithMatchingCards = new Set(
+    visibleSections
+      .filter((section) => sectionsWithMatches.has(section.id))
+      .map((section) => section.tabId),
+  );
+  const normalTab = tabs.find((tab) => tab.id === selected) ?? tabs[0];
+  const firstMatchingCardTab = tabs.find((tab) =>
+    tabsWithMatchingCards.has(tab.id),
+  );
+  const active = searching
+    ? (tabs.find((tab) => tab.id === searchTab) ??
+      (normalTab && tabsWithMatchingCards.has(normalTab.id)
+        ? normalTab
+        : firstMatchingCardTab) ??
+      (normalTab && tabMatches(normalTab)
+        ? normalTab
+        : (tabs.find(tabMatches) ?? normalTab)))
+    : normalTab;
+  const sections = visibleSections.filter(
     (section) => section.tabId === active?.id,
   );
   const actions = useDashboardActions(active);
   function select(id: string) {
+    if (searching) {
+      setSearchTab(id);
+      return;
+    }
     setSelected(id);
     localStorage.setItem("activeTab", id);
   }
@@ -37,7 +106,29 @@ export default function Dashboard() {
     <>
       <h1 className="sr-only">{t("app")}</h1>
       <ActionMenu label={t("app")} actions={actions.dashboardActions}>
-        <div className="dashboard-content">
+        <div className="dashboard-content" data-drag-board ref={dragBoard}>
+          {data.settings.quickAccess &&
+            data.items.some((item) => item.isFavorite) && (
+              <section className="quick-access">
+                <h2>{t("quickAccess")}</h2>
+                <div>
+                  {data.items
+                    .filter((item) => item.isFavorite)
+                    .map((item, i) => (
+                      <DashboardItemCard
+                        key={item.id}
+                        item={item}
+                        index={i}
+                        actions={actions}
+                        searchMatch={
+                          searching ? matchingItems.has(item.id) : undefined
+                        }
+                        favorite
+                      />
+                    ))}
+                </div>
+              </section>
+            )}
           <div className="dashboard-navigation">
             <nav className="tabs" aria-label={t("tabs")}>
               {tabs.map((tab) => (
@@ -51,52 +142,67 @@ export default function Dashboard() {
                     className={
                       "tab-entry " + (active?.id === tab.id ? "is-active" : "")
                     }
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      const drag = readDrag(e);
-                      if (drag?.kind === "section") {
-                        const section = data.sections.find(
-                          (x) => x.id === drag.id,
-                        );
-                        if (section)
-                          void actions
-                            .sectionMove(
-                              section,
-                              tab.id,
-                              data.sections.filter((x) => x.tabId === tab.id)
-                                .length,
-                            )
-                            .catch(() => {});
-                      } else if (drag?.kind === "tab") {
-                        const source = data.tabs.find((x) => x.id === drag.id);
-                        if (source)
-                          void actions
-                            .tabMove(
-                              source,
-                              data.tabs.findIndex((x) => x.id === tab.id),
-                            )
-                            .catch(() => {});
-                      }
-                    }}
+                    data-search-match={searching ? tabMatches(tab) : undefined}
+                    {...dragSource({
+                      kind: "tab",
+                      id: tab.id,
+                      container: "tabs",
+                      version: tab.version,
+                    })}
+                    data-drag-card={"tab:" + tab.id}
+                    {...dropTarget(
+                      (drag) =>
+                        drag.kind === "section"
+                          ? "inside"
+                          : drag.kind === "tab" && drag.id !== tab.id
+                            ? "horizontal"
+                            : undefined,
+                      (drag, position) => {
+                        if (drag.kind === "section") {
+                          const section = data.sections.find(
+                            (x) => x.id === drag.id,
+                          );
+                          if (section)
+                            void actions
+                              .sectionMove(
+                                section,
+                                tab.id,
+                                data.sections.filter((x) => x.tabId === tab.id)
+                                  .length,
+                              )
+                              .catch(() => {});
+                        } else {
+                          const source = data.tabs.findIndex(
+                            (x) => x.id === drag.id,
+                          );
+                          const target = data.tabs.findIndex(
+                            (x) => x.id === tab.id,
+                          );
+                          if (source >= 0)
+                            void actions
+                              .tabMove(
+                                data.tabs[source],
+                                insertionIndex(
+                                  target,
+                                  source,
+                                  position === "after",
+                                ),
+                              )
+                              .catch(() => {});
+                        }
+                      },
+                    )}
                   >
                     <button
+                      data-drag-trigger
                       className="tab-label"
                       aria-current={active?.id === tab.id ? "page" : undefined}
                       onClick={() => select(tab.id)}
                     >
-                      {tab.name}
+                      <Icon name={tab.iconKey} />
+                      <span>{tab.name}</span>
                     </button>
                     <div className="tab-tools">
-                      <DragHandle
-                        data={{
-                          kind: "tab",
-                          id: tab.id,
-                          container: "tabs",
-                          version: tab.version,
-                        }}
-                      />
                       <MenuButton
                         label={tab.name}
                         actions={actions.tabActions(tab)}
@@ -126,25 +232,6 @@ export default function Dashboard() {
               <MenuButton label={t("app")} actions={actions.dashboardActions} />
             </div>
           </div>
-          {data.settings.quickAccess &&
-            data.items.some((item) => item.isFavorite) && (
-              <section className="quick-access">
-                <h2>{t("quickAccess")}</h2>
-                <div>
-                  {data.items
-                    .filter((item) => item.isFavorite)
-                    .map((item, i) => (
-                      <DashboardItemCard
-                        key={item.id}
-                        item={item}
-                        index={i}
-                        actions={actions}
-                        favorite
-                      />
-                    ))}
-                </div>
-              </section>
-            )}
           <div className="dashboard-grid">
             {sections.map((section, index) => (
               <DashboardSectionCard
@@ -152,6 +239,11 @@ export default function Dashboard() {
                 section={section}
                 index={index}
                 actions={actions}
+                searchMatch={
+                  searching ? matchingSections.has(section.id) : undefined
+                }
+                matchingItems={searching ? matchingItems : undefined}
+                revealItems={sectionsWithMatches.has(section.id)}
               />
             ))}
           </div>
@@ -183,7 +275,7 @@ export default function Dashboard() {
           </section>
         }
       >
-        <TaskModule />
+        <TaskModule dashboardSearch={search} />
       </Suspense>
       {actions.editor && (
         <EntityEditor

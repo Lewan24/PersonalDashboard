@@ -25,7 +25,13 @@ export const taskInputSchema = z.object({
     )
     .max(100),
   links: z
-    .array(z.object({ title: z.string().trim().min(1).max(120), url }))
+    .array(
+      z.object({
+        id: z.string().uuid().optional(),
+        title: z.string().trim().min(1).max(120),
+        url,
+      }),
+    )
     .max(20),
   expectedVersion: z.number().int().positive().optional(),
 });

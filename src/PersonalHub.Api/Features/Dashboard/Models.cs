@@ -26,13 +26,15 @@ public class DashboardSection : Entity
 }
 public class DashboardItem : Entity
 {
+    public const string AutomaticIcon = "auto:favicon";
     public Guid SectionId { get; set; }
     public string ItemType { get; set; } = "compact-link";
     public string Title { get; set; } = "";
     public string? Url { get; set; }
     public string Description { get; set; } = "";
-    public string IconKey { get; set; } = "lucide:link";
+    public string IconKey { get; set; } = AutomaticIcon;
     public string AccentColor { get; set; } = "#cc0000";
+    public bool ShowUrl { get; set; }
     public bool OpenInNewTab { get; set; } = true;
     public bool IsFavorite { get; set; }
     public int SortOrder { get; set; }

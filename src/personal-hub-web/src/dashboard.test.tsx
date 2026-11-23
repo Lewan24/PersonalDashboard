@@ -10,6 +10,7 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import type { Bootstrap } from "./types";
+import { automaticIcon, Icon } from "./components/Icon";
 import Dashboard from "./pages/Dashboard";
 import App from "./App";
 
@@ -31,12 +32,11 @@ vi.mock("./HubContext", () => ({
 }));
 vi.mock("./api", async (original) => ({
   ...(await original<typeof import("./api")>()),
-  api: vi.fn(async () => ({
-    today: "2026-11-23",
-    tasks: [],
-    total: 0,
-    nextCursor: null,
-  })),
+  api: vi.fn(async (path: string) =>
+    path === "/icons"
+      ? [{ id: "icon-1", fileName: "logo.png", sizeBytes: 1024 }]
+      : { today: "2026-11-23", tasks: [], total: 0, nextCursor: null },
+  ),
 }));
 function fixture(): Bootstrap {
   const base = { version: 1, sortOrder: 0 };
@@ -146,6 +146,19 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 describe("kompaktowy dashboard", () => {
+  it("pobiera favicon spod domeny linku i używa symbolu linku po błędzie", () => {
+    const { container, rerender } = render(
+      <Icon name={automaticIcon} url="https://example.org/docs?view=2" />,
+    );
+    const image = container.querySelector("img")!;
+    expect(image.getAttribute("src")).toBe("https://example.org/favicon.ico");
+    expect(image.getAttribute("referrerpolicy")).toBe("no-referrer");
+    fireEvent.error(image);
+    expect(container.querySelector("svg.lucide-link")).toBeTruthy();
+    rerender(<Icon name="lucide:book-open" url="https://example.org/docs" />);
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector("svg.lucide-book-open")).toBeTruthy();
+  });
   it("nie wymaga trybu edycji i zachowuje moduł zadań po zmianie zakładki", async () => {
     mount();
     await screen.findByRole("heading", { name: "Zadania" });
@@ -171,6 +184,24 @@ describe("kompaktowy dashboard", () => {
     expect(
       (within(dialog).getByLabelText("URL") as HTMLInputElement).value,
     ).toBe("https://example.com");
+    const icon = within(dialog).getByRole("combobox", { name: "Ikona" });
+    expect(icon.closest("details")).toBeNull();
+    const advanced = dialog.querySelector("details")!;
+    expect(advanced.open).toBe(false);
+    fireEvent.click(within(dialog).getByText("Opcje zaawansowane"));
+    expect(advanced.open).toBe(true);
+    const type = within(advanced).getByRole("combobox", {
+      name: "Typ karty",
+    }) as HTMLSelectElement;
+    expect(type.value).toBe("compact-link");
+    expect(
+      within(advanced).getByRole("combobox", { name: "Sekcja" }),
+    ).toBeTruthy();
+    fireEvent.change(type, {
+      target: { value: "note" },
+    });
+    expect(within(dialog).getByText(/Tekst w formacie Markdown/)).toBeTruthy();
+    expect(within(dialog).queryByLabelText("URL", { exact: true })).toBeNull();
   });
   it("zapisuje szerokość sekcji przez API z kontrolą wersji", () => {
     mount();
@@ -197,6 +228,21 @@ describe("kompaktowy dashboard", () => {
     const dialog = await screen.findByRole("dialog");
     expect(dialog.querySelector("details")?.open).toBe(true);
     expect(within(dialog).getByLabelText("Kolor akcentu")).toBeTruthy();
+    const icon = within(dialog).getByRole("combobox", { name: "Ikona" });
+    await within(icon).findByRole("option", { name: "logo.png" });
+    fireEvent.change(icon, { target: { value: "icon:icon-1" } });
+    expect(dialog.querySelector(".icon-field img")?.getAttribute("src")).toBe(
+      "/api/v1/icons/icon-1",
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Zapisz" }));
+    await waitFor(() =>
+      expect(mocks.mutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          path: "/sections/section-1",
+          body: expect.objectContaining({ iconKey: "icon:icon-1" }),
+        }),
+      ),
+    );
   });
   it("menu obsługuje nawigację klawiaturą", async () => {
     mount();

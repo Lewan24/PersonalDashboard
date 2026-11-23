@@ -1399,6 +1399,28 @@
         }
       }
     },
+    "/api/v1/import/homepage": {
+      "post": {
+        "tags": [
+          "HomepageImport"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HomepageDocument"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/import/preview": {
       "post": {
         "tags": [
@@ -1456,6 +1478,73 @@
         "responses": {
           "200": {
             "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/backup/restore": {
+      "post": {
+        "tags": [
+          "PersonalHub.Api"
+        ],
+        "parameters": [
+          {
+            "name": "confirmed",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/vnd.sqlite3": {
+              "schema": {
+                "$ref": "#/components/schemas/IFormFile"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnonymousTypeOfstring"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/system/clear": {
+      "post": {
+        "tags": [
+          "PersonalHub.Api"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatabaseConfirmation"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnonymousTypeOfstring"
+                }
+              }
+            }
           }
         }
       }
@@ -1932,6 +2021,9 @@
           "accentColor": {
             "type": "string"
           },
+          "showUrl": {
+            "type": "boolean"
+          },
           "openInNewTab": {
             "type": "boolean"
           },
@@ -2106,6 +2198,17 @@
           }
         }
       },
+      "DatabaseConfirmation": {
+        "required": [
+          "confirmed"
+        ],
+        "type": "object",
+        "properties": {
+          "confirmed": {
+            "type": "boolean"
+          }
+        }
+      },
       "ExportDocument": {
         "required": [
           "schemaVersion",
@@ -2172,6 +2275,104 @@
           },
           "settings": {
             "type": "object"
+          }
+        }
+      },
+      "HomepageDocument": {
+        "required": [
+          "tabs"
+        ],
+        "type": "object",
+        "properties": {
+          "tabs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HomepageTab"
+            }
+          }
+        }
+      },
+      "HomepageLink": {
+        "required": [
+          "title",
+          "url",
+          "description",
+          "service",
+          "favorite",
+          "openInNewTab"
+        ],
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "service": {
+            "type": "boolean"
+          },
+          "favorite": {
+            "type": "boolean"
+          },
+          "openInNewTab": {
+            "type": "boolean"
+          }
+        }
+      },
+      "HomepageSection": {
+        "required": [
+          "name",
+          "layoutMode",
+          "desktopColumns",
+          "collapsed",
+          "links"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "layoutMode": {
+            "type": "string"
+          },
+          "desktopColumns": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "collapsed": {
+            "type": "boolean"
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HomepageLink"
+            }
+          }
+        }
+      },
+      "HomepageTab": {
+        "required": [
+          "name",
+          "sections"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HomepageSection"
+            }
           }
         }
       },
@@ -2330,6 +2531,10 @@
           }
         }
       },
+      "IFormFile": {
+        "type": "string",
+        "format": "binary"
+      },
       "JsonElement": { },
       "Tag": {
         "type": "object",
@@ -2464,6 +2669,9 @@
   "tags": [
     {
       "name": "PersonalHub.Api"
+    },
+    {
+      "name": "HomepageImport"
     }
   ]
 }

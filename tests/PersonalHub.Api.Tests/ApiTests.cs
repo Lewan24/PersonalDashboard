@@ -119,12 +119,23 @@ public class ApiTests
         var export=await Read(await c.GetAsync("/api/v1/export/json"));var preview=await Read(await c.PostAsJsonAsync("/api/v1/import/preview",export));await Read(await c.PostAsJsonAsync("/api/v1/import/commit",new{previewToken=preview["previewToken"]!.GetValue<string>(),confirmed=true}));
         Assert.Equal(png,await c.GetByteArrayAsync("/api/v1/icons/"+Id(icon)));
         var backup=await c.GetByteArrayAsync("/api/v1/backup/sqlite");var path=Path.Combine(f.Folder,"icons.db");await File.WriteAllBytesAsync(path,backup);using var connection=new Microsoft.Data.Sqlite.SqliteConnection("Data Source="+path);await connection.OpenAsync();using var cmd=connection.CreateCommand();cmd.CommandText="SELECT Data FROM Icons";Assert.Equal(png,(byte[])(await cmd.ExecuteScalarAsync())!);
-        Assert.True((await c.SendAsync(new HttpRequestMessage(HttpMethod.Delete,"/api/v1/icons/"+Id(icon)){Content=JsonContent.Create(new{})})).IsSuccessStatusCode);Assert.Equal("lucide:link",(await Bootstrap(c))["items"]!.AsArray().Single(x=>Id(x!)==item)!["iconKey"]!.GetValue<string>());
+        Assert.True((await c.SendAsync(new HttpRequestMessage(HttpMethod.Delete,"/api/v1/icons/"+Id(icon)){Content=JsonContent.Create(new{})})).IsSuccessStatusCode);Assert.Equal("auto:favicon",(await Bootstrap(c))["items"]!.AsArray().Single(x=>Id(x!)==item)!["iconKey"]!.GetValue<string>());
     }
     [Fact] public async Task SettingsBooleansAndFavoriteProjectionPersist()
     {
-        using var f=new HubFactory();using var c=f.Client();var b=await Bootstrap(c);await NewTask(c,b,"2026-03-28");
-        await Read(await c.PutAsJsonAsync("/api/v1/settings",new{showOverdueInToday=true,clockSeconds=true}));Assert.Single((await Read(await c.GetAsync("/api/v1/tasks/today")))["tasks"]!.AsArray());
+        using var f=new HubFactory();using var c=f.Client();var b=await Bootstrap(c);
+        var overdue = await NewTask(c, b, "2026-03-28");
+        var today = await NewTask(c, b, "2026-03-29");
+        await NewTask(c, b, "2026-03-30");
+        await NewTask(c, b, null);
+        var settings = await Read(await c.PutAsJsonAsync("/api/v1/settings", new { showOverdueInToday = false, clockSeconds = true }));
+        Assert.True(settings["clockSeconds"]!.GetValue<bool>());
+        var expected = new[] { Id(overdue), Id(today) }.Order().ToArray();
+        foreach (var path in new[] { "/api/v1/tasks/today", "/api/v1/tasks?due=today" })
+        {
+            var projection = await Read(await c.GetAsync(path));
+            Assert.Equal(expected, projection["tasks"]!.AsArray().Select(task => Id(task!)).Order());
+        }
         var item=b["items"]![0]!;await Read(await c.PatchAsJsonAsync("/api/v1/items/"+Id(item),new{isFavorite=true}));var current=await Bootstrap(c);Assert.True(current["items"]!.AsArray().Single(x=>Id(x!)==Id(item))!["isFavorite"]!.GetValue<bool>());
         using var scope=f.Services.CreateScope();Assert.Equal(3,await scope.ServiceProvider.GetRequiredService<HubDb>().Items.CountAsync());
     }

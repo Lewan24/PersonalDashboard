@@ -9,3 +9,5 @@
 docs/e2e-report/
 docs/e2e-results/
 **/test-results/
+
+/homepagedata/

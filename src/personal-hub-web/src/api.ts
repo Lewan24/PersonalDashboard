@@ -12,6 +12,7 @@ export async function api<T>(
   body?: unknown,
 ): Promise<T> {
   const form = body instanceof FormData;
+  const file = body instanceof Blob;
   const response = await fetch("/api/v1" + path, {
     method,
     headers:
@@ -19,10 +20,16 @@ export async function api<T>(
         ? {}
         : {
             "X-PersonalHub-Client": "1",
-            ...(!form ? { "Content-Type": "application/json" } : {}),
+            ...(!form
+              ? { "Content-Type": file ? body.type : "application/json" }
+              : {}),
           },
     body:
-      method === "GET" ? undefined : form ? body : JSON.stringify(body ?? {}),
+      method === "GET"
+        ? undefined
+        : form || file
+          ? body
+          : JSON.stringify(body ?? {}),
   });
   if (!response.ok) {
     const problem = await response

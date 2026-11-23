@@ -1,16 +1,25 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { Route, Routes, Link, Navigate, useLocation } from "react-router-dom";
+import {
+  Route,
+  Routes,
+  Link,
+  Navigate,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 import { Settings2 } from "lucide-react";
 import { useHub } from "./HubContext";
 import { t } from "./i18n";
 import Dashboard from "./pages/Dashboard";
-import { CommandPalette } from "./components/CommandPalette";
+import { DashboardSearch } from "./components/DashboardSearch";
 import { TaskEditor } from "./components/TaskEditor";
 const Settings = lazy(() => import("./pages/Settings"));
 export default function App() {
   const { data, task, setTask, status, error, retry } = useHub();
   const location = useLocation();
-  const [palette, setPalette] = useState(false);
+  const navigate = useNavigate();
+  const [search, setSearch] = useState("");
+  const [focusSearch, setFocusSearch] = useState(0);
   const [now, setNow] = useState(new Date());
   useEffect(() => {
     const id = setInterval(
@@ -20,6 +29,12 @@ export default function App() {
     return () => clearInterval(id);
   }, [data.settings.clockSeconds]);
   useEffect(() => {
+    if (focusSearch && location.pathname === "/") {
+      document.getElementById("dashboard-search")?.focus();
+      setFocusSearch(0);
+    }
+  }, [focusSearch, location.pathname]);
+  useEffect(() => {
     const key = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       const typing = target.closest(
@@ -28,13 +43,26 @@ export default function App() {
       const dialog = document.querySelector("[role=dialog]");
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        if (!dialog) setPalette((v) => !v);
+        if (!dialog) {
+          if (location.pathname !== "/") navigate("/");
+          setFocusSearch((previous) => previous + 1);
+        }
+        return;
+      }
+      if (
+        e.key === "Escape" &&
+        !dialog &&
+        location.pathname === "/" &&
+        search
+      ) {
+        setSearch("");
         return;
       }
       if (typing || dialog || e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key === "/") {
         e.preventDefault();
-        setPalette(true);
+        if (location.pathname !== "/") navigate("/");
+        setFocusSearch((previous) => previous + 1);
       } else if (e.key.toLowerCase() === "n") {
         e.preventDefault();
         setTask({});
@@ -42,7 +70,7 @@ export default function App() {
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [setTask]);
+  }, [location.pathname, navigate, search, setTask]);
   const options: Intl.DateTimeFormatOptions = {
     timeZone: data.settings.timezone,
     hour: "2-digit",
@@ -60,13 +88,21 @@ export default function App() {
           {t("app")}
           <span className="brand-dot" />
         </Link>
-        <button
-          className="search-trigger"
-          onClick={() => setPalette(true)}
-          title={t("shortcuts")}
-        >
-          {t("search")} <kbd>Ctrl K</kbd>
-        </button>
+        {location.pathname === "/" ? (
+          <DashboardSearch
+            value={search}
+            onChange={setSearch}
+            externalSearch={data.settings.externalSearch}
+          />
+        ) : (
+          <Link
+            className="button search-trigger"
+            to="/"
+            onClick={() => setFocusSearch((previous) => previous + 1)}
+          >
+            {t("search")} <kbd>Ctrl K</kbd>
+          </Link>
+        )}
         {data.settings.clockVisible && (
           <div className="clock">
             <time dateTime={now.toISOString()}>
@@ -102,7 +138,7 @@ export default function App() {
       <main id="main">
         <Suspense fallback={<p role="status">{t("loading")}</p>}>
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={<Dashboard search={search} />} />
             <Route
               path="/tasks"
               element={
@@ -129,7 +165,6 @@ export default function App() {
           </Routes>
         </Suspense>
       </main>
-      {palette && <CommandPalette onClose={() => setPalette(false)} />}{" "}
       {task && (
         <TaskEditor
           key={task.id ?? "new"}

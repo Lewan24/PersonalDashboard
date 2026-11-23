@@ -1,9 +1,18 @@
-import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useId, useState } from "react";
+import { Controller, useForm } from "react-hook-form";
 import { useHub } from "../HubContext";
 import { t } from "../i18n";
 import { safeUrl } from "../api";
 import { Dialog } from "./Dialog";
+import { TagOptions } from "./Tags";
+import { IconField } from "./IconField";
+const itemTypes = [
+  "compact-link",
+  "detailed-link",
+  "service-card",
+  "note",
+  "spacer",
+];
 type Kind = "tabs" | "sections" | "items" | "task-columns";
 export function EntityEditor({
   kind,
@@ -17,8 +26,11 @@ export function EntityEditor({
   appearance?: boolean;
 }) {
   const { data, mutate } = useHub();
+  const itemTypeHelp = useId();
+  const [advancedOpen, setAdvancedOpen] = useState(appearance);
   const [error, setError] = useState("");
   const {
+    control,
     register,
     handleSubmit,
     watch,
@@ -63,9 +75,13 @@ export function EntityEditor({
       />
     </label>
   );
-  const select = (key: string, options: { id: string; name: string }[]) => (
+  const select = (
+    key: string,
+    options: { id: string; name: string }[],
+    label = key,
+  ) => (
     <label key={key}>
-      {t(key)}
+      {t(label)}
       <select {...register(key)}>
         {options.map((x) => (
           <option key={x.id} value={x.id}>
@@ -74,6 +90,20 @@ export function EntityEditor({
         ))}
       </select>
     </label>
+  );
+  const icon = (
+    <Controller
+      name="iconKey"
+      control={control}
+      render={({ field }) => (
+        <IconField
+          value={String(field.value ?? "lucide:link")}
+          onChange={field.onChange}
+          enabled={isItem || advancedOpen}
+          allowAutomatic={isItem}
+        />
+      )}
+    />
   );
   const submit = handleSubmit(async (values) => {
     setError("");
@@ -94,8 +124,11 @@ export function EntityEditor({
     delete body.tags;
     delete body.createdAt;
     delete body.updatedAt;
-    if (isItem && !body.title && safeUrl(String(body.url)))
-      body.title = new URL(String(body.url)).hostname;
+    if (isItem && !String(body.title ?? "").trim()) {
+      if (itemType === "spacer") body.title = t("spacer");
+      else if (safeUrl(String(body.url)))
+        body.title = new URL(String(body.url)).hostname;
+    }
     if (
       kind === "task-columns" &&
       (!body.wipLimit || Number.isNaN(body.wipLimit))
@@ -151,19 +184,12 @@ export function EntityEditor({
           <>
             {!["note", "spacer"].includes(String(itemType)) &&
               text("url", 2048, true, "url")}
-            {text("title", 120, false)}
-            {select(
-              "sectionId",
-              data.sections.map((s) => ({
-                id: s.id,
-                name: `${data.tabs.find((t) => t.id === s.tabId)?.name} / ${s.name}`,
-              })),
-            )}
+            {text("title", 120, itemType === "note")}
           </>
         ) : (
           text("name", 80)
         )}
-        {(kind === "sections" || isItem) && (
+        {(kind === "sections" || (isItem && itemType !== "spacer")) && (
           <label>
             {t("description")}
             <textarea
@@ -173,38 +199,53 @@ export function EntityEditor({
             />
           </label>
         )}
-        <details open={appearance || undefined}>
+        {isItem && (
+          <>
+            {icon}
+            {!["note", "spacer"].includes(String(itemType)) && check("showUrl")}
+            <fieldset>
+              <legend>{t("tags")}</legend>
+              <TagOptions tags={data.tags} input={register("tagIds")} />
+            </fieldset>
+          </>
+        )}
+        <details
+          open={advancedOpen}
+          onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
+        >
           <summary>{t("advanced")}</summary>
           {isItem && (
             <>
+              <label>
+                <span id={itemTypeHelp + "-label"}>{t("itemType")}</span>
+                <select
+                  aria-labelledby={itemTypeHelp + "-label"}
+                  aria-describedby={itemTypeHelp}
+                  {...register("itemType")}
+                >
+                  {itemTypes.map((type) => (
+                    <option key={type} value={type}>
+                      {t(type)}
+                    </option>
+                  ))}
+                </select>
+                <small id={itemTypeHelp} aria-live="polite">
+                  {t(itemType + "Help")}
+                </small>
+              </label>
               {select(
-                "itemType",
-                [
-                  "compact-link",
-                  "detailed-link",
-                  "service-card",
-                  "note",
-                  "spacer",
-                ].map((id) => ({ id, name: t(id) })),
+                "sectionId",
+                data.sections.map((s) => ({
+                  id: s.id,
+                  name: `${data.tabs.find((t) => t.id === s.tabId)?.name} / ${s.name}`,
+                })),
+                "section",
               )}
               {check("isFavorite")}
               {check("openInNewTab")}
-              <fieldset>
-                <legend>{t("tags")}</legend>
-                {data.tags.map((tag) => (
-                  <label className="check" key={tag.id}>
-                    <input
-                      type="checkbox"
-                      value={tag.id}
-                      {...register("tagIds")}
-                    />
-                    {tag.name}
-                  </label>
-                ))}
-              </fieldset>
             </>
           )}
-          {kind !== "task-columns" && text("iconKey", 120, false)}
+          {!isItem && kind !== "task-columns" && icon}
           {text(
             kind === "task-columns" ? "color" : "accentColor",
             7,

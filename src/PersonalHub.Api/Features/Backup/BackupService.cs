@@ -10,12 +10,20 @@ public class BackupService(HubDb db, TimeProvider clock)
     {
         Directory.CreateDirectory(DirectoryPath);
         var path = Path.Combine(DirectoryPath, $"{prefix}-{clock.GetUtcNow():yyyyMMdd-HHmmssfff}-{Guid.CreateVersion7():N}.db");
-        await db.Database.OpenConnectionAsync();
-        using (var destination = new SqliteConnection($"Data Source={path}"))
+        var partial = path + ".partial";
+        try
         {
-            await destination.OpenAsync(); ((SqliteConnection)db.Database.GetDbConnection()).BackupDatabase(destination);
+            var connectionString = new SqliteConnectionStringBuilder { DataSource = partial, Pooling = false }.ToString();
+            using (var destination = new SqliteConnection(connectionString))
+            {
+                await destination.OpenAsync();
+                await db.Database.OpenConnectionAsync();
+                try { ((SqliteConnection)db.Database.GetDbConnection()).BackupDatabase(destination); }
+                finally { await db.Database.CloseConnectionAsync(); }
+            }
+            File.Move(partial, path);
         }
-        await db.Database.CloseConnectionAsync();
+        finally { File.Delete(partial); }
         if (prefix == "backup") foreach (var old in new DirectoryInfo(DirectoryPath).GetFiles("backup-*.db").OrderByDescending(f => f.Name).Skip(10)) old.Delete();
         return path;
     }

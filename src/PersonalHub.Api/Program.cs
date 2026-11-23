@@ -19,6 +19,18 @@ builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 25 * 1024 * 
 builder.Services.AddProblemDetails(); builder.Services.AddOpenApi();
 builder.Services.AddSingleton(TimeProvider.System); builder.Services.AddSingleton<PreviewStore>();
 builder.Services.AddSingleton<WriteGate>();
+builder.Services.AddOutputCache(options =>
+{
+    options.SizeLimit = 32 * 1024 * 1024;
+    options.MaximumBodySize = 4 * 1024 * 1024;
+    options.AddPolicy("hub-data", policy => policy.Expire(TimeSpan.FromSeconds(30)).VaryByValue(context =>
+    {
+        var revision = context.RequestServices.GetRequiredService<WriteGate>().Revision;
+        var utcMinute = context.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow().ToUnixTimeSeconds() / 60;
+        // Keep an in-flight read from repopulating the active key after a write or midnight.
+        return new KeyValuePair<string, string>("hub", FormattableString.Invariant($"{revision}:{utcMinute}"));
+    }));
+});
 builder.Services.AddDbContext<HubDb>(o => o.UseSqlite(builder.Configuration.GetConnectionString("Default") ?? "Data Source=data/dashboard.db;Foreign Keys=True;Default Timeout=5").AddInterceptors(new SqlitePragmas()));
 builder.Services.AddScoped<SettingsService>(); builder.Services.AddScoped<TaskService>(); builder.Services.AddScoped<BackupService>(); builder.Services.AddScoped<TransferService>();
 builder.Services.AddResponseCompression(o => { o.EnableForHttps = true; o.Providers.Add<BrotliCompressionProvider>(); o.Providers.Add<GzipCompressionProvider>(); });
@@ -50,7 +62,9 @@ app.Use(async (context, next) =>
 {
     try
     {
-        var limit = context.Request.Path == "/api/v1/import/preview" ? 25 * 1024 * 1024 : context.Request.Path == "/api/v1/icons" ? 300 * 1024 : 1024 * 1024;
+        var limit = context.Request.Path == SqliteSnapshot.RestorePath ? SqliteSnapshot.MaxUploadBytes
+            : context.Request.Path == "/api/v1/import/preview" ? 25 * 1024 * 1024
+            : context.Request.Path == "/api/v1/icons" ? 300 * 1024 : 1024 * 1024;
         var feature = context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>();
         if (feature is { IsReadOnly: false }) feature.MaxRequestBodySize = limit;
         if (context.Request.ContentLength > limit) throw new DomainError(413, "Przekroczono limit żądania.");
@@ -65,7 +79,7 @@ app.Use(async (context, next) =>
     }
 });
 if (trustedProxies.Length > 0) app.UseForwardedHeaders();
-app.UseMiddleware<SecurityMiddleware>(); app.UseMiddleware<WriteGateMiddleware>(); app.UseResponseCompression(); app.UseDefaultFiles();
+app.UseMiddleware<SecurityMiddleware>(); app.UseMiddleware<WriteGateMiddleware>(); app.UseResponseCompression(); app.UseOutputCache(); app.UseDefaultFiles();
 app.UseStaticFiles(new StaticFileOptions { OnPrepareResponse = c => c.Context.Response.Headers.CacheControl = c.File.Name == "index.html" ? "no-cache" : c.Context.Request.Path.StartsWithSegments("/assets") ? "public,max-age=31536000,immutable" : "no-cache" });
 app.MapOpenApi();
 app.MapGet("/health/live", () => Results.Ok(new { status = "live" }));
@@ -76,7 +90,7 @@ api.MapGet("/bootstrap", async (HubDb db, SettingsService settings, TaskService 
     tabs = await db.Tabs.OrderBy(x => x.SortOrder).ToListAsync(), sections = await db.Sections.OrderBy(x => x.SortOrder).ToListAsync(),
     items = await db.Items.Include(x => x.Tags).OrderBy(x => x.SortOrder).ToListAsync(), tags = await db.Tags.ToListAsync(),
     columns = await db.Columns.OrderBy(x => x.SortOrder).ToListAsync(), settings = await settings.Read(), taskSummary = await tasks.Summary(), today = await settings.Today(), todayTasks = await tasks.Projection("today")
-});
+}).CacheOutput("hub-data");
 app.MapFallback(async context =>
 {
     if (new[] { "/api", "/health", "/openapi" }.Any(p => context.Request.Path.StartsWithSegments(p))) await Results.Problem(statusCode: 404, title: "Nieznany endpoint.").ExecuteAsync(context);

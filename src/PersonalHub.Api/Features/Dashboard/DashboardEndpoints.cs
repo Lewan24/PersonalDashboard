@@ -73,7 +73,7 @@ public static class DashboardEndpoints
             if (await db.Tags.AnyAsync(x => x.Name == tag.Name && x.Id != tag.Id)) throw new DomainError(409, "Tag o tej nazwie już istnieje.");
         }, (_, _, _) => Task.CompletedTask);
     }
-    private static readonly string[] ItemFields = ["sectionId", "itemType", "title", "url", "description", "iconKey", "accentColor", "openInNewTab", "isFavorite", "tagIds"];
+    private static readonly string[] ItemFields = ["sectionId", "itemType", "title", "url", "description", "iconKey", "accentColor", "openInNewTab", "showUrl", "isFavorite", "tagIds"];
     public static async Task ValidateItem(HubDb db, DashboardItem item)
     {
         Validation.Text(item.Title, 120, "Tytuł"); Validation.Text(item.Description, item.ItemType == "note" ? 5000 : 500, "Opis", false); Validation.Color(item.AccentColor);
@@ -81,7 +81,7 @@ public static class DashboardEndpoints
         if (item.ItemType is not ("note" or "spacer")) Validation.Url(item.Url); else item.Url = null;
         if (!await db.Sections.AnyAsync(x => x.Id == item.SectionId)) throw new DomainError(422, "Nieznana sekcja.");
         if (await db.Items.CountAsync(x => x.SectionId == item.SectionId && x.Id != item.Id) >= 200) throw new DomainError(422, "Limit 200 kart.");
-        await ValidateIcon(db, item.IconKey);
+        if (item.IconKey != DashboardItem.AutomaticIcon) await ValidateIcon(db, item.IconKey);
     }
     public static async Task ValidateIcon(HubDb db, string key)
     {

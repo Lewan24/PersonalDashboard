@@ -6,6 +6,11 @@ using PersonalHub.Api.Features.Settings;
 namespace PersonalHub.Api.Infrastructure.Persistence;
 public static class Seed
 {
+    public static List<TaskColumn> DefaultColumns() =>
+        new[] { "Backlog", "Do zrobienia", "W trakcie", "Zrobione" }
+            .Select((name, index) => new TaskColumn { Name = name, SortOrder = index, IsDone = index == 3 })
+            .ToList();
+
     public static async Task Run(HubDb db, TimeProvider clock, bool additive = false)
     {
         if (!additive && await db.Metadata.AnyAsync(x => x.Key == "SeedCompletedAt")) return;
@@ -16,9 +21,7 @@ public static class Seed
             db.AddRange(tab, section);
             db.Items.Add(new DashboardItem { SectionId = section.Id, Title = name == "Cybersecurity" ? "OWASP" : name == "Prywatne" ? "Wikipedia" : "GitHub", Url = name == "Cybersecurity" ? "https://owasp.org" : name == "Prywatne" ? "https://pl.wikipedia.org" : "https://github.com", Description = "Dane przykładowe", ItemType = "detailed-link", IsFavorite = name == "Praca" });
         }
-        if (!await db.Columns.AnyAsync())
-            foreach (var (name, i) in new[] { "Backlog", "Do zrobienia", "W trakcie", "Zrobione" }.Select((n, i) => (n, i)))
-                db.Columns.Add(new TaskColumn { Name = name, SortOrder = i, IsDone = i == 3 });
+        if (!await db.Columns.AnyAsync()) db.Columns.AddRange(DefaultColumns());
         if (!additive) db.Metadata.Add(new SchemaMetadata { Key = "SeedCompletedAt", Value = clock.GetUtcNow().ToString("O") });
         await db.SaveChangesAsync();
     }

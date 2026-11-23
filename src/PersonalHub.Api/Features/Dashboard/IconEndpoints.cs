@@ -23,7 +23,7 @@ public static class IconEndpoints
         api.MapDelete("/icons/{id:guid}", async (Guid id, HubDb db) =>
         {
             var icon = await db.Icons.FindAsync(id) ?? throw new DomainError(404, "Nieznana ikona."); var key = "icon:" + id;
-            foreach (var row in await db.Items.Where(x => x.IconKey == key).ToListAsync()) row.IconKey = "lucide:link";
+            foreach (var row in await db.Items.Where(x => x.IconKey == key).ToListAsync()) row.IconKey = DashboardItem.AutomaticIcon;
             foreach (var row in await db.Tabs.Where(x => x.IconKey == key).ToListAsync()) row.IconKey = "lucide:folder";
             foreach (var row in await db.Sections.Where(x => x.IconKey == key).ToListAsync()) row.IconKey = "lucide:folder";
             db.Icons.Remove(icon); await db.SaveChangesAsync(); return Results.NoContent();
